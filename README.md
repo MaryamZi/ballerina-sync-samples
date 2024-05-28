@@ -38,7 +38,7 @@ This implementation retrieves `Contact` data from Salesforce, transforms it to t
 
     - Missing required fields from Salesforce
     - Unexpected values from Salesforce (e.g., a value that cannot be passed as a number for a field that expects a number)
-    - Additional fields (if the query retrieves all/additional fields)
+    - Additional fields (if the query retrieves all/additional fields) - these fields are ignored in the transformation/sync
 
 - Email notification of failures, both full and partial. This implementation uses the GMail API (and connector), but alternatively, it is possible to use [an SMTP client](https://ballerina.io/learn/by-example/send-email/) from the `ballerina/email` module.
 
@@ -95,7 +95,7 @@ E.g.,
 updateWindowInHours = 96
 ```
 
-In order to send email notification, configure the following values for the GMail connector.
+In order to send an email notification on failure, configure the following values for the GMail connector. If not specified, the sync will still happen, but emails will not be sent.
 
 ```toml
 [emailConfig]
@@ -109,7 +109,7 @@ clientSecret = "<GMAIL_CLIENT_SECRET>"
 
 ### Running
 
-Use the `bal run` command to run this program locally.
+Use the `bal run` command to run this program.
 
 ```cmd
 ballerina-sync-samples$ bal run
