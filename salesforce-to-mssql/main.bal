@@ -90,15 +90,14 @@ function transformContact(Contact contact) returns DbContact|error =>
         fax: getNonEmptyStringValue(contact.Fax),
         email: getNonEmptyStringValue(contact.Email),
         title: getNonEmptyStringValue(contact.Title),
-        address: transformAddress(contact),
+        address: transformAddress(contact.MailingStreet, contact.MailingCity, contact.MailingState, contact.MailingCountry),
         backupPostalCode: check parseNonEmptyStringAsIntValue(contact.OtherPostalCode),
         isDeleted: check boolean:fromString(contact.IsDeleted),
         lastModifiedDate: check time:civilFromString(contact.LastModifiedDate)
     };
 
-function transformAddress(Contact contact) returns string? => 
-    let string[] sfComponents = [contact.MailingStreet, contact.MailingCity, contact.MailingState, contact.MailingCountry],
-        string address = string:'join(", ", ...from string component in sfComponents
+function transformAddress(string mailingStreet, string mailingCity, string mailingState, string mailingCountry) returns string? => 
+    let string address = string:'join(", ", ...from string component in [mailingStreet, mailingCity, mailingState, mailingCountry]
                             let string? nilableComponent = getNonEmptyStringValue(component)
                             where nilableComponent is string
                             select nilableComponent)
