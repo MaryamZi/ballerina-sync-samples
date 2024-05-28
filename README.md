@@ -22,6 +22,8 @@ This implementation retrieves `Contact` data from Salesforce, transforms it to t
         FROM Contact WHERE LastModifiedDate > 2024-05-20T07:40:01.797503142Z
     ```
 
+- You can also specify the batch size for database updates via the `dbBatchSize` configurable variable.
+
 ## Key considerations and features
 
 - Ability to do a
@@ -68,6 +70,8 @@ CREATE TABLE [Contact] (
 
 ### Configurable values
 
+#### Mandatory configurable values
+
 The following configurable values are mandatory.
 
 ```toml
@@ -87,25 +91,33 @@ refreshToken = "<SF_REFRESH_TOKEN>"
 refreshUrl = "<SF_REFRESH_URL>"
 ```
 
-Additionally, a value can be specified for `updateWindowInHours`, in order to retrieve only the entries that were updated/added within the specified number of hours.
+#### Optional configurable values
 
-E.g.,
+- A value can be specified for `updateWindowInHours`, in order to retrieve only the entries that were updated/added within the specified number of hours.
 
-```toml
-updateWindowInHours = 96
-```
+    ```toml
+    updateWindowInHours = 96
+    ```
 
-In order to send an email notification on failure, configure the following values for the GMail connector. If not specified, the sync will still happen, but emails will not be sent.
+- The batch size for database updates can be configured by specifying a value for `dbBatchSize` (the default is 1000). Note that the MS SQL connector internally has a batch size of `1000` and if the value specified as `dbBatchSize` is more than 1000, the MS SQL connector will still use a batch size of 1000. 
 
-```toml
-[emailConfig]
-toEmailAddresses = ["<EMAIL_ADDRESS_1>", "<EMAIL_ADDRESS_2>"]
+    ```toml
+    dbBatchSize = 10
+    ```
 
-[emailConfig.gmailAuthConfig]
-refreshToken = "<GMAIL_REFRESH_TOKEN>"
-clientId = "<GMAIL_CLIENT_ID>"
-clientSecret = "<GMAIL_CLIENT_SECRET>"
-```
+    There is an [open issue](https://github.com/ballerina-platform/ballerina-library/issues/4133) to track adding support to configure this at connector level itself.
+
+- In order to send an email notification on failure, configure the following values for the GMail connector. If not specified, the sync will still happen, but emails will not be sent.
+
+    ```toml
+    [emailConfig]
+    toEmailAddresses = ["<EMAIL_ADDRESS_1>", "<EMAIL_ADDRESS_2>"]
+
+    [emailConfig.gmailAuthConfig]
+    refreshToken = "<GMAIL_REFRESH_TOKEN>"
+    clientId = "<GMAIL_CLIENT_ID>"
+    clientSecret = "<GMAIL_CLIENT_SECRET>"
+    ```
 
 ### Running
 

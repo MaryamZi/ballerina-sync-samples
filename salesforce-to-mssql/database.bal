@@ -67,7 +67,7 @@ function updateDatabase(DbContact[] dbContacts, FailureData failureData) returns
     if updatedContactCount > 0 {
         sql:ParameterizedQuery[] updateQueries = 
             from DbContact contact in contactsToUpdate select getContactUpdateQuery(contact);
-        sql:ExecutionResult[]|sql:Error updateStatus = dbClient->batchExecute(updateQueries);
+        sql:ExecutionResult[]|sql:Error updateStatus = batchExecute(updateQueries);
         
         if updateStatus is error {
             failedExistingContactIds = from DbContact {id} in contactsToUpdate select id;
@@ -78,7 +78,7 @@ function updateDatabase(DbContact[] dbContacts, FailureData failureData) returns
     if newDbContacts.length() > 0 {
         sql:ParameterizedQuery[] insertQueries = 
             from DbContact contact in newDbContacts select getContactInsertQuery(contact);
-        sql:ExecutionResult[]|error insertStatus = dbClient->batchExecute(insertQueries);
+        sql:ExecutionResult[]|error insertStatus = batchExecute(insertQueries);
 
         if insertStatus is error {
             failedNewContactIds = from DbContact {id} in newDbContacts select id;
@@ -105,4 +105,20 @@ function updateDatabase(DbContact[] dbContacts, FailureData failureData) returns
                    failedContactIds = failedContactIds,
                    successfulCount = dbContacts.length() - failedContactIds.length());
     failureData.databaseSyncFailedEntriesIds = failedContactIds;
+}
+
+// Will be able to directly pass `dbBatchSize` to the `dbClient->batchExecute` method
+// and remove this custom logic once https://github.com/ballerina-platform/ballerina-library/issues/4133 
+// is supported.
+function batchExecute(sql:ParameterizedQuery[] queries) returns sql:ExecutionResult[]|sql:Error {
+    sql:ExecutionResult[] results = [];
+    int totalQueryCount = queries.length();
+    foreach int index in int:range(0, totalQueryCount, dbBatchSize) {
+        int endIndex = index + dbBatchSize;
+        sql:ParameterizedQuery[] batch = 
+            queries.slice(index, endIndex > totalQueryCount ? totalQueryCount : endIndex);
+        sql:ExecutionResult[] batchExecuteResult = check dbClient->batchExecute(batch);
+        results.push(...batchExecuteResult);
+    }
+    return results;
 }

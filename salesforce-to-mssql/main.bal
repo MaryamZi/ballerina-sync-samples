@@ -13,7 +13,8 @@ configurable string dbHost = ?;
 configurable string dbUser = ?;
 configurable string dbDatabase = ?;
 configurable string dbPassword = ?;
-configurable mssql:Options & readonly dbOptions = {};
+configurable mssql:Options dbOptions = {};
+configurable int dbBatchSize = 1000;
 
 configurable byte? updateWindowInHours = ();
 
@@ -27,6 +28,10 @@ const string QUERY = "SELECT Id, FirstName, LastName, Phone, Fax, Email, Title, 
 
 public function main() returns error? {
     do {
+        if dbBatchSize <= 0 {
+            fail error(string `Invalid batch size ${dbBatchSize}, expected a value greater than zero.`);
+        }
+
         FailureData failureData = {};
         
         Contact[]? contactsRequiringUpdates = check queryBatch(getQuery(), failureData);
