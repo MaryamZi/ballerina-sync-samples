@@ -205,7 +205,7 @@ function testAdditionalFieldsFromSF() returns error? {
 
     check main();
 
-    assertEmailSubject("Salesforce to MS SQL Sync Failed for Some Records");
+    assertEmailSubject("Salesforce to MS SQL Sync - Ignored Fields");
     assertEmailBody("Ignored extra Salesforce field(s): Name");
 }
 

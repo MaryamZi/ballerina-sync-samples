@@ -54,10 +54,12 @@ function populateIgnoredKeyInfo(Contact contact, FailureData failureData) {
 }
 
 function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
+    string emailSubject = "";
     string emailBody = "";
 
     string? failureString = constructFailureString(failureData);
     if failureString is string {
+        emailSubject = "Salesforce to MS SQL Sync Failed for Some Records";
         emailBody = failureString;
         log:printError("Failed to process some records", failures = failureString);
     }
@@ -67,7 +69,9 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
         string ignoredFieldsStr = string:'join(", ", ...ignoredFields);
         log:printWarn("Ignored extra Salesforce field(s)", fields = ignoredFieldsStr);
         
-        if emailBody.length() != 0 {
+        if emailBody.length() == 0 {
+            emailSubject = "Salesforce to MS SQL Sync - Ignored Fields";
+        } else {
             emailBody += "\n\n";
         }
         emailBody += "Ignored extra Salesforce field(s): " + ignoredFieldsStr;
@@ -81,16 +85,16 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
         log:printDebug("Not sending notification email since email config is not specified.");
         return;
     }
-    sendPartialFailureEmail(emailBody);
+    sendPartialFailureEmail(emailBody, emailSubject);
 }
 
-function sendPartialFailureEmail(string emailBody) {
+function sendPartialFailureEmail(string emailBody, string subject) {
     do {
         gmail:Client gmail = check initGmailClient();
 
         gmail:MessageRequest message = {
             to: toEmailAddresses,
-            subject: "Salesforce to MS SQL Sync Failed for Some Records",
+            subject,
             bodyInText: emailBody
         };
 
