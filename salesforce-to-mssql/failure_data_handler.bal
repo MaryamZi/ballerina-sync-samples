@@ -3,25 +3,22 @@ import ballerina/time;
 
 import ballerinax/googleapis.gmail;
 
-configurable EmailConfig? emailConfig = ();
-
-type EmailConfig record {|
-    string[] toEmailAddresses;
-    gmail:OAuth2RefreshTokenGrantConfig gmailAuthConfig;
-|};
+configurable string[]? toEmailAddresses = ();
+configurable string? gmailRefreshToken = ();
+configurable string? gmailClientId = ();
+configurable string? gmailClientSecret = ();
 
 function sendEmailForSyncFailure(string errMessage) {
-    if emailConfig is () {
+    if isEmailConfigUnspecified() {
         log:printDebug("Not sending notification email since email config is not specified.");
         return;
     }
 
     do {
-        EmailConfig config = <EmailConfig> emailConfig;
-        gmail:Client gmail = check initGmailClient(config);
+        gmail:Client gmail = check initGmailClient();
 
         gmail:MessageRequest message = {
-            to: config.toEmailAddresses,
+            to: toEmailAddresses,
             subject: "Salesforce to MS SQL Sync Failed",
             bodyInText: string `Sync task at ${time:utcToString(time:utcNow())} failed: ${errMessage}`
         };
@@ -80,7 +77,7 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
         return;
     }
 
-    if emailConfig is () {
+    if toEmailAddresses is () {
         log:printDebug("Not sending notification email since email config is not specified.");
         return;
     }
@@ -89,11 +86,10 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
 
 function sendPartialFailureEmail(string emailBody) {
     do {
-        EmailConfig config = <EmailConfig> emailConfig;
-        gmail:Client gmail = check initGmailClient(config);
+        gmail:Client gmail = check initGmailClient();
 
         gmail:MessageRequest message = {
-            to: config.toEmailAddresses,
+            to: toEmailAddresses,
             subject: "Salesforce to MS SQL Sync Failed for Some Records",
             bodyInText: emailBody
         };
@@ -105,8 +101,18 @@ function sendPartialFailureEmail(string emailBody) {
     }
 }
 
-function initGmailClient(EmailConfig config) returns gmail:Client|error =>
-    new gmail:Client({auth: config.gmailAuthConfig});
+function isEmailConfigUnspecified() returns boolean {
+    return toEmailAddresses is () || gmailClientId is () || gmailClientSecret is () || gmailRefreshToken is ();
+}
+
+function initGmailClient() returns gmail:Client|error =>
+    new gmail:Client({
+        auth: <gmail:OAuth2RefreshTokenGrantConfig> {
+            clientId: check gmailClientId.ensureType(),
+            clientSecret: check gmailClientSecret.ensureType(),
+            refreshToken: check gmailRefreshToken.ensureType()
+        }
+    });
 
 function constructFailureString(FailureData failureData) returns string? {
     Contact[]? transformationFailedEntries = failureData.transformationFailedEntries;

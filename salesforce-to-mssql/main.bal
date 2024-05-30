@@ -6,7 +6,11 @@ import ballerinax/mssql;
 import ballerinax/mssql.driver as _;
 import ballerinax/salesforce as sf;
 
-configurable sf:ConnectionConfig sfConnectionConfig = ?;
+configurable string sfBaseUrl = ?;
+configurable string sfClientId = ?;
+configurable string sfClientSecret = ?;
+configurable string sfRefreshToken = ?;
+configurable string sfRefreshUrl = ?;
 
 configurable int dbPort = ?;
 configurable string dbHost = ?;
@@ -20,7 +24,15 @@ configurable byte? updateWindowInHours = ();
 
 final sf:Client sfClient = check initSalesforceClient();
 
-function initSalesforceClient() returns sf:Client|error => new (sfConnectionConfig);
+function initSalesforceClient() returns sf:Client|error => new ({
+    baseUrl: sfBaseUrl,
+    auth: {
+        clientId: sfClientId,
+        clientSecret: sfClientSecret,
+        refreshUrl: sfRefreshUrl,
+        refreshToken: sfRefreshToken
+    }
+});
 
 final sql:Client dbClient = check new mssql:Client(dbHost, dbUser, dbPassword, dbDatabase, dbPort, options = dbOptions);
 

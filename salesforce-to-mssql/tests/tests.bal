@@ -29,7 +29,7 @@ function getMockSFClient() returns sf:Client|error => test:mock(sf:Client);
 @test:Mock {
     functionName: "initGmailClient"
 }
-function getMockGmailClient(EmailConfig config) returns gmail:Client|error => 
+function getMockGmailClient() returns gmail:Client|error => 
     test:mock(gmail:Client, new MockGmailClient());
 
 @test:Config
