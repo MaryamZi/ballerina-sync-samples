@@ -146,7 +146,7 @@ public type ADEmployeeUpdate record {
 
 function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
     let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
-        dayforce:PersonContact[]? personContactItems = employee?.Contacts?.Items,
+        dayforce:Location? personContactDetails = employee?.HomeOrganization,
         dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
         dayforce:PersonAddress? address = getAddress(employee) in
     {
@@ -156,9 +156,9 @@ function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
         middleName: employee.MiddleName,
         sn: employee.LastName,
         displayName: employee.DisplayName,
-        mobile: getContactInfo(personContactItems, BUSINESS_MOBILE),
-        telephoneNumber: getContactInfo(personContactItems, BUSINESS_PHONE),
-        mail: getContactInfo(personContactItems, BUSINESS_EMAIL),
+        mobile: personContactDetails?.ContactCellPhone,
+        telephoneNumber: personContactDetails?.BusinessPhone,
+        mail: personContactDetails?.ContactEmail,
         title: getPositionField(employeeWorkAssignmentItems, TITLE),
         manager: getManager(employee?.EmployeeManagers?.Items),
         department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
@@ -182,25 +182,6 @@ function getDistinguishedName(ADEmployeeUpdate user) returns string =>
         string? lastName = user?.sn,
         string name = lastName is () ? firstName : string `${firstName} ${lastName}` in
         string `CN=${name},OU=${adOU},DC=ad,DC=windows`;
-
-function getContactInfo(dayforce:PersonContact[]? personContactItems, string xRefCode) returns string? {
-    if personContactItems is () {
-        return ();
-    }
-
-    foreach dayforce:PersonContact item in personContactItems {
-        if item?.ContactInformationType?.XRefCode == xRefCode {
-            return item.ContactNumber;
-        }
-    }
-    return ();
-}
-
-enum BusinessContactDetailsField {
-    BUSINESS_MOBILE = "BusinessMobile",
-    BUSINESS_PHONE = "BusinessPhone",
-    BUSINESS_EMAIL = "BusinessEmail"
-}
 
 enum TitleField {
     TITLE = "title",
