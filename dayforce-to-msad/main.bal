@@ -146,6 +146,7 @@ public type ADEmployeeUpdate record {
 
 function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
     let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
+        dayforce:Location? personContactDetails = employee?.HomeOrganization,
         dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
         dayforce:PersonAddress? address = getAddress(employee) in
     {
@@ -155,9 +156,9 @@ function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
         middleName: employee.MiddleName,
         sn: employee.LastName,
         displayName: employee.DisplayName,
-        mobile: employee?.HomeOrganization?.ContactCellPhone,
-        telephoneNumber: employee?.HomeOrganization?.BusinessPhone,
-        mail: employee?.HomeOrganization?.ContactEmail,
+        mobile: personContactDetails?.ContactCellPhone,
+        telephoneNumber: personContactDetails?.BusinessPhone,
+        mail: personContactDetails?.ContactEmail,
         title: getPositionField(employeeWorkAssignmentItems, TITLE),
         manager: getManager(employee?.EmployeeManagers?.Items),
         department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
