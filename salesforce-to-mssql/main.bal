@@ -56,14 +56,18 @@ const string QUERY = "SELECT Id, FirstName, LastName, Phone, Fax, Email, Title, 
 
 public function main() returns error? {
     do {
-        // Validate that the specified batch size is greater than zero.
+        // Validate that the specified Salesforce and database batch sizes are greater than zero.
         if dbBatchSize <= 0 {
-            fail error(string `Invalid batch size ${dbBatchSize}, expected a value greater than zero.`);
+            fail error(string `Invalid batch size: ${dbBatchSize}, expected a value greater than zero.`);
+        }
+        if sfMaxRecords is int && sfMaxRecords <= 0 {
+            fail error(string `Invalid value for Salesfoce Max Records: ${
+                        <int> sfMaxRecords}, expected a value greater than zero.`);
         }
 
         check syncData();
     } on fail error err {
-        // Control is transferred here if a failure occured for all data and/or a complete batch.
+        // Control is transferred here if a failure occured for all data and/or a complete chunk.
         log:printError("Failed to sync data", err);
         // Send an email about the failure if configured to do so.
         sendEmailForSyncFailure(err.message());
@@ -104,13 +108,13 @@ function syncDataChunks(string id, FailureData failureData) returns error? {
     int pageNumber = 1;
     while true {
         // Retrieve data from Salesforce.
-        Contact[]? contacts = check queryBatch(id, failureData, pageNumber);
+        Contact[]? contacts = check retrieveChunk(id, failureData, pageNumber);
         // Nil indicates that all data has been retrieved.
         if contacts is () {
             return;
         }
 
-        // No entries requiring updates in the specific batch.
+        // No entries requiring updates in the specific chunk.
         if contacts.length() == 0 {
             continue;
         }
@@ -128,7 +132,7 @@ function syncDataChunks(string id, FailureData failureData) returns error? {
 // Function to retrieve data from Salesforce in chunks.
 // Data retrieved in CSV format is then converted to an array of records, ensuring all
 // the expected fields are present.
-function queryBatch(string id, FailureData failureData, int pageNumber) returns Contact[]|error? {
+function retrieveChunk(string id, FailureData failureData, int pageNumber) returns Contact[]|error? {
     log:printInfo("Retrieving Salesforce query results", pageNumber = pageNumber, jobId = id);
 
     // Retrieve the CSV data by specifying the job ID and max record size. 
