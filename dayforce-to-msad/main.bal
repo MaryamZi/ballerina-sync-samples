@@ -22,6 +22,7 @@ const SUCCEEDED = "Succeeded";
 const STATUS = "Status";
 
 final dayforce:Client dayforceClient = check new ({
+    timeout: 120,
     auth: {
         username: dayforceUsername,
         password: dayforcePassword
@@ -61,7 +62,7 @@ public function main() returns error? {
 
         anydata status = jobStatus?.Data[STATUS];
         if status != SUCCEEDED {
-            fail error("Job did not complete within specified time", 
+            fail error("Dayforce to MS AD sync job did not complete within specified time", 
                        backgroundQueueItemId = backgroundQueueItemId,
                        status = status);
         }
@@ -79,17 +80,17 @@ public function main() returns error? {
                 break;
             }
             pageCount += 1;
-
+            log:printInfo("Successfully retrieved entries from Dayforce", pageCount = pageCount, entryCount = data.length());
             foreach dayforce:Employee employee in data {
                 do {
                     ADEmployeeUpdate adUser = check transform(employee);
                     ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
                     if resultStatus != ldap:SUCCESS {
-                        fail error("Received non-success status on update attempt", status = resultStatus);
+                        fail error("Received non-success status on MS AD update attempt", status = resultStatus);
                     }
                 } on fail error err {
                     string employeeNumber = employee.EmployeeNumber ?: "Unavailable";
-                    log:printError("Failed to sync data for user", err, employeeNumber = employeeNumber);
+                    log:printError("Failed to sync data from Dayforce to MS AD for user", err, employeeNumber = employeeNumber);
                     syncFailedEmployees.push(employeeNumber);
                 }
             }
@@ -97,16 +98,18 @@ public function main() returns error? {
                 check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId](employeeDetails.Paging);
         }
     } on fail error err {
-        log:printError("Failed to sync data", err, syncedPageCount = pageCount, jobId = jobIdOptional, syncFailedEmployees = syncFailedEmployees);
+        log:printError("Failed to sync data from Dayforce to MS AD", err, syncedPageCount = pageCount, 
+                        jobId = jobIdOptional, syncFailedEmployees = syncFailedEmployees);
         return err;
     }
 
     if syncFailedEmployees.length() == 0 {
-        log:printInfo("Successfully synced data", syncedPageCount = pageCount, jobId = jobIdOptional);
+        log:printInfo("Successfully synced data from Dayforce to MS AD", syncedPageCount = pageCount, jobId = jobIdOptional);
         return;
     }
 
-    log:printError("Failed to sync some data", syncedPageCount = pageCount, jobId = jobIdOptional, syncFailedEmployees = syncFailedEmployees);
+    log:printError("Failed to sync some data from Dayforce to MS AD", syncedPageCount = pageCount, jobId = jobIdOptional, 
+                    syncFailedEmployees = syncFailedEmployees);
 }
 
 function getBackgroundQueueItemId(json job) returns int:Signed32|error {
