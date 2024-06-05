@@ -104,7 +104,7 @@ function updateDatabase(DbContact[] dbContacts, FailureData failureData) returns
     log:printError("Database update failed for some contacts", 
                    failedContactIds = failedContactIds,
                    successfulCount = dbContacts.length() - failedContactIds.length());
-    failureData.databaseSyncFailedEntriesIds = failedContactIds;
+    failureData.databaseSyncFailedEntriesIds.push(...failedContactIds);
 }
 
 // Will be able to directly pass `dbBatchSize` to the `dbClient->batchExecute` method

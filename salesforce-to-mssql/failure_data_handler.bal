@@ -31,13 +31,13 @@ function sendEmailForSyncFailure(string errMessage) {
 }
 
 type FailureData record {|
-    Contact[] transformationFailedEntries?;
-    string[] databaseSyncFailedEntriesIds?;
-    string[] ignoredFields?;
+    Contact[] transformationFailedEntries = [];
+    string[] databaseSyncFailedEntriesIds = [];
+    string[] ignoredFields = [];
 |};
 
 function populateIgnoredKeyInfo(Contact contact, FailureData failureData) {
-    string[] ignoredFields = [];
+    string[] ignoredFields = failureData.ignoredFields;
     // TODO: can be done in a better way U9 onward, using projection
     foreach string key in contact.keys() {
         string|error removeResult = trap contact.remove(key);
@@ -46,10 +46,6 @@ function populateIgnoredKeyInfo(Contact contact, FailureData failureData) {
             // and therefore, not required for the sync.
             ignoredFields.push(key);
         }
-    }
-    
-    if ignoredFields.length() != 0 {
-        failureData.ignoredFields = ignoredFields;
     }
 }
 
@@ -64,8 +60,8 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
         log:printError("Failed to process some records", failures = failureString);
     }
 
-    string[]? ignoredFields = failureData.ignoredFields;
-    if ignoredFields !is () {
+    string[] ignoredFields = failureData.ignoredFields;
+    if ignoredFields.length() != 0 {
         string ignoredFieldsStr = string:'join(", ", ...ignoredFields);
         log:printWarn("Ignored extra Salesforce field(s)", fields = ignoredFieldsStr);
         
@@ -119,22 +115,22 @@ function initGmailClient() returns gmail:Client|error =>
     });
 
 function constructFailureString(FailureData failureData) returns string? {
-    Contact[]? transformationFailedEntries = failureData.transformationFailedEntries;
-    string[]? databaseSyncFailedEntriesIds = failureData.databaseSyncFailedEntriesIds;
+    Contact[] transformationFailedEntries = failureData.transformationFailedEntries;
+    string[] databaseSyncFailedEntriesIds = failureData.databaseSyncFailedEntriesIds;
 
-    if transformationFailedEntries is () && databaseSyncFailedEntriesIds is ()  {
+    if transformationFailedEntries.length() == 0 && databaseSyncFailedEntriesIds.length() == 0  {
         return;
     }
 
     string failureString = string `Sync attempt at ${time:utcToString(time:utcNow())} had failures.`;
 
-    if transformationFailedEntries !is () {
+    if transformationFailedEntries.length() != 0 {
         failureString += "\n\n Transformation to target database type failed for the following entries due to invalid values: ";
         failureString += <string> from [int, map<string>] [index, entry] in transformationFailedEntries.enumerate()
                             select string `${"\n\t"} ${index + 1}. ${entry.toString()}`;
     }
 
-    if databaseSyncFailedEntriesIds !is () {
+    if databaseSyncFailedEntriesIds.length() != 0 {
         failureString += "\n\n Database update failed for the following IDs: ";
         failureString += <string> from [int, string] [index, id] in databaseSyncFailedEntriesIds.enumerate()
                             select string `${"\n\t"} ${index + 1}. ${id}`;

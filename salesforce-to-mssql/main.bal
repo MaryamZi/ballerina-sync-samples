@@ -17,6 +17,8 @@ configurable string sfClientSecret = ?;
 configurable string sfRefreshToken = ?;
 configurable string sfRefreshUrl = ?;
 
+configurable int? sfMaxRecords = ();
+
 // Database configuration.
 configurable int dbPort = ?;
 configurable string dbHost = ?;
@@ -59,25 +61,7 @@ public function main() returns error? {
             fail error(string `Invalid batch size ${dbBatchSize}, expected a value greater than zero.`);
         }
 
-        // `FailureData` is used to collect partial failure data (e.g., due to invalid values, 
-        // insufficient fields, etc.) to give detailed information on partial or full failure.
-        FailureData failureData = {};
-        
-        // Retrieve data from Salesforce.
-        Contact[]? contactsRequiringUpdates = check queryBatch(getQuery(), failureData);
-        if contactsRequiringUpdates is () {
-            return;
-        }
-        
-        // Transform data from Salesforce to the format expected by the database.
-        // The actual transformation of individual entries is done via data mapper.
-        DbContact[] dbContacts = check transformContacts(contactsRequiringUpdates, failureData);
-        
-        // Update the database for successfully transformed values.
-        check updateDatabase(dbContacts, failureData);
-
-        // Log partial failure data and send an email about failures if configured to do so.
-        logPartialFailureDetailsAndSendEmail(failureData);
+        check syncData();
     } on fail error err {
         // Control is transferred here if a failure occured for all data and/or a complete batch.
         log:printError("Failed to sync data", err);
@@ -85,6 +69,22 @@ public function main() returns error? {
         sendEmailForSyncFailure(err.message());
         return err;
     }
+}
+
+function syncData() returns error? {
+    string query = getQuery();
+    log:printInfo("Querying Salesforce data", query = query);
+
+    // Create the query job and wait for its completion.
+    // The `id` of the bulk job is extracted to retrieve the results. 
+    sf:BulkJobInfo {id} = check queryAndWait(query);
+
+    // `FailureData` is used to collect partial failure data (e.g., due to invalid values, 
+    // insufficient fields, etc.) to give detailed information on partial or full failure.
+    FailureData failureData = {};
+    check syncDataChunks(id, failureData);
+    // Log partial failure data and send an email about failures if configured to do so.
+    logPartialFailureDetailsAndSendEmail(failureData);    
 }
 
 // Build the final SOQL query for Salesforce. Incorporates a WHERE clause if `updateWindowInHours` 
@@ -100,10 +100,79 @@ function getQuery() returns string {
     return query;
 }
 
+function syncDataChunks(string id, FailureData failureData) returns error? {
+    int pageNumber = 1;
+    while true {
+        // Retrieve data from Salesforce.
+        Contact[]? contacts = check queryBatch(id, failureData, pageNumber);
+        // Nil indicates that all data has been retrieved.
+        if contacts is () {
+            return;
+        }
+
+        // No entries requiring updates in the specific batch.
+        if contacts.length() == 0 {
+            continue;
+        }
+        
+        // Transform data from Salesforce to the format expected by the database.
+        // The actual transformation of individual entries is done via data mapper.
+        DbContact[] dbContacts = check transformContacts(contacts, failureData);
+        
+        // Update the database for successfully transformed values.
+        check updateDatabase(dbContacts, failureData); 
+        pageNumber += 1;
+    }   
+}
+
+// Function to retrieve data from Salesforce in chunks.
+// Data retrieved in CSV format is then converted to an array of records, ensuring all
+// the expected fields are present.
+function queryBatch(string id, FailureData failureData, int pageNumber) returns Contact[]|error? {
+    log:printInfo("Retrieving Salesforce query results", pageNumber = pageNumber, jobId = id);
+
+    // Retrieve the CSV data by specifying the job ID and max record size. 
+    string[][] csvData = check sfClient->getQueryResult(id, sfMaxRecords);
+    
+    if csvData.length() < 2 {
+        log:printInfo("No more data to retrieve", pageNumber = pageNumber, jobId = id);
+        return ();
+    }
+
+    log:printInfo("Successfully retrieved data from Salesforce", pageNumber = pageNumber, 
+                    entryCount = csvData.length() - 1, jobId = id);
+
+    // Filter out up to date data to avoid transformation and updates of the database for already
+    // up to date data.
+    // The `LastModifiedDate` value is compared with that in the database to see if an update is required.
+    string[][] dataRequiringUpdates = check filterOutUpToDateData(csvData, pageNumber);
+    if dataRequiringUpdates.length() == 0 {
+        return [];
+    }
+
+    // Transform the entries requiring updates to records.
+    return transformCSVToRecords(dataRequiringUpdates, failureData, pageNumber);
+}
+
+// Create the query job and wait for its completion.
+function queryAndWait(string query) returns sf:BulkJobInfo|error {
+    future<sf:BulkJobInfo|error> queryFuture = check sfClient->createQueryJobAndWait({
+        operation: "query",
+        query
+    });
+
+    sf:BulkJobInfo bulkJobInfo = check wait queryFuture;
+    if bulkJobInfo.state is sf:FAILED|sf:ABORTED {
+        log:printError("Failed to retrieve data", id = bulkJobInfo.id, state = bulkJobInfo.state);
+        return error("Failed to retrieve data", id = bulkJobInfo.id, state = bulkJobInfo.state);
+    }
+    return bulkJobInfo;
+}
+
 // Transform a set of entries from the Salesforce representation to the format expected by the database.
 function transformContacts(Contact[] contacts, FailureData failureData) returns DbContact[]|error {
     DbContact[] dbContacts = [];
-    Contact[] failedEntries = [];
+    Contact[] failedEntries = failureData.transformationFailedEntries;
 
     foreach Contact contact in contacts {
         DbContact|error dbContact = transformContact(contact);
@@ -112,10 +181,6 @@ function transformContacts(Contact[] contacts, FailureData failureData) returns 
             continue;
         }
         failedEntries.push(contact);
-    }
-
-    if failedEntries.length() != 0 {
-        failureData.transformationFailedEntries = failedEntries;
     }
 
     if dbContacts.length() == 0 {
@@ -149,57 +214,8 @@ function transformAddress(string mailingStreet, string mailingCity, string maili
                             select nilableComponent)
     in getNonEmptyStringValue(address);
 
-// Function to retrieve data from Salesforce.
-// Data retrieved in CSV format is then converted to an array of records, ensuring all
-// the expected fields are present.
-function queryBatch(string query, FailureData failureData) returns Contact[]|error? {
-    log:printInfo("Querying Salesforce data", query = query);
-
-    // Create the query job and wait for its completion.
-    // The `id` of the bulk job is extracted to retrieve the results. 
-    sf:BulkJobInfo {id} = check queryAndWait(query);
-
-    log:printInfo("Retrieving Salesforce query results", jobId = id);
-
-    // Retrieve the CSV data by specifying the job ID. 
-    string[][] csvData = check sfClient->getQueryResult(id);
-    
-    if csvData.length() < 2 {
-        log:printInfo("No new data was retrieved from Salesforce", jobId = id);
-        return;
-    }
-
-    log:printInfo("Successfully retrieved data from Salesforce", count = csvData.length() - 1, jobId = id);
-
-    // Filter out up to date data to avoid transformation and updates of the database for already
-    // up to date data.
-    // The `LastModifiedDate` value is compared with that in the database to see if an update is required.
-    string[][]? dataRequiringUpdates = check filterOutUpToDateData(csvData);
-    if dataRequiringUpdates is () {
-        return;
-    }
-
-    // Transform the entries requiring updates to records.
-    return transformCSVToRecords(dataRequiringUpdates, failureData);
-}
-
-// Create the query job and wait for its completion.
-function queryAndWait(string query) returns sf:BulkJobInfo|error {
-    future<sf:BulkJobInfo|error> queryFuture = check sfClient->createQueryJobAndWait({
-        operation: "query",
-        query
-    });
-
-    sf:BulkJobInfo bulkJobInfo = check wait queryFuture;
-    if bulkJobInfo.state is sf:FAILED|sf:ABORTED {
-        log:printError("Failed to retrieve data", id = bulkJobInfo.id, state = bulkJobInfo.state);
-        return error("Failed to retrieve data", id = bulkJobInfo.id, state = bulkJobInfo.state);
-    }
-    return bulkJobInfo;
-}
-
 // Filter out up to date data and return only the data requiring database updates.
-function filterOutUpToDateData(string[][] csvData) returns string[][]|error? {
+function filterOutUpToDateData(string[][] csvData, int pageNumber) returns string[][]|error {
     string[] headers = csvData[0];
     string[][] dataRequiringUpdates = [headers];
     
@@ -234,13 +250,14 @@ function filterOutUpToDateData(string[][] csvData) returns string[][]|error? {
         dataRequiringUpdates.push(row);
     }
     if ignoredUpToDateContactCount == csvData.length() - 1 {
-        log:printInfo("The database is up-to-date for all contacts, no new updates were done");
-        return;
+        log:printInfo("The database is up-to-date for all contacts, no new updates were done", 
+                        pageNumber = pageNumber);
+        return [];
     }
     return dataRequiringUpdates;
 }
 
-function transformCSVToRecords(string[][] csvData, FailureData failureData) returns Contact[]|error {
+function transformCSVToRecords(string[][] csvData, FailureData failureData, int pageNumber) returns Contact[]|error {
     string[] headers = csvData[0];
     int headersLength = headers.length();
 
@@ -254,7 +271,7 @@ function transformCSVToRecords(string[][] csvData, FailureData failureData) retu
     Contact|error contactData = sfData.cloneWithType();
     if contactData is error {
         return error("Required fields not found in the data retrieved from Salesforce. Received headers: " + 
-                        headers.toString());
+                        headers.toString(), pageNumber = pageNumber);
     }
 
     populateIgnoredKeyInfo(contactData, failureData);

@@ -46,7 +46,7 @@ function testSuccessfulSync() returns error? {
 
     test:prepare(sfClient)
         .when("getQueryResult")
-        .thenReturn(<string[][]>mockData);
+        .thenReturnSequence(<string[][]>mockData, <string[][]>[]);
 
     check main();
 
@@ -83,8 +83,9 @@ function testSuccessfulSync() returns error? {
 
 
 @test:Config {
-    after: cleanUpDb,
-    dependsOn: [testSuccessfulSync]
+    after: cleanUpDb ,
+    dependsOn: [testSuccessfulSync],
+    enable: false // https://github.com/ballerina-platform/ballerina-lang/issues/42858
 }
 function testSuccessfulSyncWithUpdates() returns error? {
     test:prepare(sfClient)
@@ -100,7 +101,7 @@ function testSuccessfulSyncWithUpdates() returns error? {
 
     test:prepare(sfClient)
         .when("getQueryResult")
-        .thenReturn(<string[][]>mockData);
+        .thenReturnSequence(<string[][]>mockData, <string[][]>[]);
 
     check main();
 
@@ -148,7 +149,8 @@ function testSuccessfulSyncWithUpdates() returns error? {
 }
 
 @test:Config {
-    dependsOn: [testSuccessfulSyncWithUpdates]
+    dependsOn: [testSuccessfulSyncWithUpdates],
+    enable: false // https://github.com/ballerina-platform/ballerina-lang/issues/42858
 }
 function testInsufficientFieldsFromSF() {
     test:prepare(sfClient)
@@ -163,7 +165,7 @@ function testInsufficientFieldsFromSF() {
 
     test:prepare(sfClient)
         .when("getQueryResult")
-        .thenReturn(<string[][]>mockData);
+        .thenReturnSequence(<string[][]>mockData, <string[][]>[]);
 
     error? mainResult = main();
     test:assertTrue(mainResult is error);
@@ -186,7 +188,8 @@ function testInsufficientFieldsFromSF() {
 
 @test:Config {
     dependsOn: [testInsufficientFieldsFromSF],
-    after: cleanUpDb
+    after: cleanUpDb,
+    enable: false // https://github.com/ballerina-platform/ballerina-lang/issues/42858
 }
 function testAdditionalFieldsFromSF() returns error? {
     test:prepare(sfClient)
@@ -201,7 +204,7 @@ function testAdditionalFieldsFromSF() returns error? {
 
     test:prepare(sfClient)
         .when("getQueryResult")
-        .thenReturn(<string[][]>mockData);
+        .thenReturnSequence(<string[][]>mockData, <string[][]>[]);
 
     check main();
 
@@ -211,7 +214,8 @@ function testAdditionalFieldsFromSF() returns error? {
 
 @test:Config {
     dependsOn: [testAdditionalFieldsFromSF],
-    after: cleanUpDb
+    after: cleanUpDb,
+    enable: false // https://github.com/ballerina-platform/ballerina-lang/issues/42858
 }
 function testFieldsOfInvalidTypesFromSF() returns error? {
     test:prepare(sfClient)
@@ -227,7 +231,7 @@ function testFieldsOfInvalidTypesFromSF() returns error? {
 
     test:prepare(sfClient)
         .when("getQueryResult")
-        .thenReturn(<string[][]>mockData);
+        .thenReturnSequence(<string[][]>mockData, <string[][]>[]);
 
     check main();
 
