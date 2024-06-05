@@ -4,12 +4,19 @@ import ballerina/log;
 import bhashinee/dayforce;
 import nuvindu/ldap;
 
+// Specify values that can change by environment and/or run as `configurable`
+// variables. These can be overridden via configuration files, environment variables,
+// and CLI arguments - https://ballerina.io/learn/provide-values-to-configurable-variables/
+
+// Dayforce configuration.
 configurable string dayforceServiceUrl = ?;
 configurable string dayforceUsername = ?;
 configurable string dayforcePassword = ?;
+// Configuration for time to wait for Dayforce job to complete.
 configurable decimal dayforceJobCompletionWaitTime = 300;
 configurable decimal dayforceJobCompletionWaitInterval = 30;
 
+// MS AD configuration.
 configurable string adHostName = ?;
 configurable int adPort = ?;
 configurable string adDomainName = ?;
@@ -21,6 +28,7 @@ const MODIFIED_SINCE_DELTA_DATE = "MODIFIED_SINCE_DELTA_DATE";
 const SUCCEEDED = "Succeeded";
 const STATUS = "Status";
 
+// The Dayforce connector instance that is used for Dayforce operations.
 final dayforce:Client dayforceClient = check new ({
     timeout: 120,
     auth: {
@@ -29,6 +37,7 @@ final dayforce:Client dayforceClient = check new ({
     }
 }, dayforceServiceUrl);
 
+// The LDAP connector instance that is used for MS AD operations.
 final ldap:Client adClient = check new ({
     hostName: adHostName,
     port: adPort,
@@ -42,17 +51,18 @@ public function main() returns error? {
     string[] syncFailedEmployees = [];
 
     do {
+        // Create the Employee export job and retrieve the queue ID.
         json job = check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/V1/EmployeeExportJobs.post(true, {
             DeltaOption: MODIFIED_SINCE_DELTA_DATE
         });
         int:Signed32 backgroundQueueItemId = check getBackgroundQueueItemId(job);
 
+        // Wait, a specific time period, for the job to complete, periodically checking if the job
+        // is complete by retrieving the job status.
         dayforce:Payload_Object jobStatus = 
             check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
-
         int tryCount = <int> (dayforceJobCompletionWaitTime / dayforceJobCompletionWaitInterval);
         int currentTry = 0;
-
         while jobStatus?.Data[STATUS] != SUCCEEDED && currentTry < tryCount {
             runtime:sleep(dayforceJobCompletionWaitInterval);
             jobStatus = 
@@ -67,10 +77,13 @@ public function main() returns error? {
                        status = status);
         }
 
+        // Retrieve the job ID on successful completion.
         string jobId = check getJobId(jobStatus);
         jobIdOptional = jobId;
 
         dayforce:Employee[]? data;
+
+        // Retrieve paginated data until all the data is retrieved.
         dayforce:PaginatedPayload_IEnumerable_Employee? employeeDetails =
             check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId];
 
@@ -83,21 +96,28 @@ public function main() returns error? {
             log:printInfo("Successfully retrieved entries from Dayforce", pageCount = pageCount, entryCount = data.length());
             foreach dayforce:Employee employee in data {
                 do {
+                    // For each employee entry retrieved from Dayforce, transform the entry to the format
+                    // expected by MS AD.
                     ADEmployeeUpdate adUser = check transform(employee);
+                    // Update the details on MS AD.
                     ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
                     if resultStatus != ldap:SUCCESS {
                         fail error("Received non-success status on MS AD update attempt", status = resultStatus);
                     }
                 } on fail error err {
+                    // For each individual failure, either due to transformation failure, update failure, or receiving a non-success
+                    // status, add the employee number to the list of failed IDs for detailed error reporting.
                     string employeeNumber = employee.EmployeeNumber ?: "Unavailable";
                     log:printError("Failed to sync data from Dayforce to MS AD for user", err, employeeNumber = employeeNumber);
                     syncFailedEmployees.push(employeeNumber);
                 }
             }
+            // Continue to retrieve pagignated data.
             employeeDetails = 
                 check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId](employeeDetails.Paging);
         }
     } on fail error err {
+        // Log and return an error if retrieving an entire chunk of data fails.
         log:printError("Failed to sync data from Dayforce to MS AD", err, syncedPageCount = pageCount, 
                         jobId = jobIdOptional, syncFailedEmployees = syncFailedEmployees);
         return err;
@@ -149,7 +169,7 @@ public type ADEmployeeUpdate record {
 
 function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
     let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
-        dayforce:Location? personContactDetails = employee?.HomeOrganization,
+        dayforce:Location? homeOrganization = employee?.HomeOrganization,
         dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
         dayforce:PersonAddress? address = getAddress(employee) in
     {
@@ -159,9 +179,9 @@ function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
         middleName: employee.MiddleName,
         sn: employee.LastName,
         displayName: employee.DisplayName,
-        mobile: personContactDetails?.ContactCellPhone,
-        telephoneNumber: personContactDetails?.BusinessPhone,
-        mail: personContactDetails?.ContactEmail,
+        mobile: homeOrganization?.ContactCellPhone,
+        telephoneNumber: homeOrganization?.BusinessPhone,
+        mail: homeOrganization?.ContactEmail,
         title: getPositionField(employeeWorkAssignmentItems, TITLE),
         manager: getManager(employee?.EmployeeManagers?.Items),
         department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
