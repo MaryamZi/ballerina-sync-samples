@@ -16,7 +16,7 @@ configurable string sfClientId = ?;
 configurable string sfClientSecret = ?;
 configurable string sfRefreshToken = ?;
 configurable string sfRefreshUrl = ?;
-
+// Maximum records per chunk (page) for Salesforce data retrieval.
 configurable int sfMaxRecords = -1;
 
 // Database configuration.

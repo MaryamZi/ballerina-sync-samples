@@ -12,6 +12,8 @@ This implementation retrieves `Contact` data from Salesforce, transforms it to t
 
 - An update happens only if the last updated time (`lastUpdatedTime`) value of an entry (identified by the ID) in the database is not the same as the `LastUpdatedTime` of the entry from Salesforce.
 
+- Data is retrieved in chunks (pagination) and each chunk is processed and relevant updates are done in the database before moving on to the next chunk. If required, the maximum number of records per chunk (page) can be specified via the `sfMaxRecords` configurable variable.
+
 - You can optionally specify the update window in hours via the `updateWindowInHours` configurable variable, which if specified, will be incoporated into the Salesforce Object Query Language (SOQL) query to retrieve only the entries that were added/updated within the specified number of hours. 
 
     E.g.,
@@ -31,6 +33,12 @@ This implementation retrieves `Contact` data from Salesforce, transforms it to t
     i. full sync - sync all the records from Salesforce to MS SQL
 
     ii. partial sync - sync all the record that have been updated within a specified number of hours
+
+- Ability to control
+
+    i. maximum number of records to retrieve per chunk from Salesforce
+
+    ii. batch size for database updates
 
 - Transforming data from Salesforce to the format expected by the database is done using a data mapper.
 
@@ -97,6 +105,12 @@ refreshUrl = "<SF_REFRESH_URL>"
 
     ```toml
     updateWindowInHours = 96
+    ```
+
+- The maximum number of records to be retrieved per chunk from Salesforce can be configured by specifying a value for `sfMaxRecords`.
+
+    ```toml
+    sfMaxRecords = 500
     ```
 
 - The batch size for database updates can be configured by specifying a value for `dbBatchSize` (the default is 1000). Note that the MS SQL connector internally has a batch size of `1000` and if the value specified as `dbBatchSize` is more than 1000, the MS SQL connector will still use a batch size of 1000. 
