@@ -17,7 +17,7 @@ configurable string sfClientSecret = ?;
 configurable string sfRefreshToken = ?;
 configurable string sfRefreshUrl = ?;
 
-configurable int? sfMaxRecords = ();
+configurable int sfMaxRecords = -1;
 
 // Database configuration.
 configurable int dbPort = ?;
@@ -32,7 +32,7 @@ configurable int dbBatchSize = 1000;
 // Update window configuration.
 // Allows retrieving only entries that were updated within the specified number of hours.
 // If unspecified, retrieves all data.
-configurable byte? updateWindowInHours = ();
+configurable int updateWindowInHours = -1;
 
 // The Salesforce connector instance that is used for Salesforce operations.
 final sf:Client sfClient = check initSalesforceClient();
@@ -56,13 +56,9 @@ const string QUERY = "SELECT Id, FirstName, LastName, Phone, Fax, Email, Title, 
 
 public function main() returns error? {
     do {
-        // Validate that the specified Salesforce and database batch sizes are greater than zero.
+        // Validate that the specified database batch size is greater than zero.
         if dbBatchSize <= 0 {
             fail error(string `Invalid batch size: ${dbBatchSize}, expected a value greater than zero.`);
-        }
-        if sfMaxRecords is int && sfMaxRecords <= 0 {
-            fail error(string `Invalid value for Salesfoce Max Records: ${
-                        <int> sfMaxRecords}, expected a value greater than zero.`);
         }
 
         check syncData();
@@ -96,7 +92,7 @@ function syncData() returns error? {
 function getQuery() returns string {
     string query = QUERY;
 
-    if updateWindowInHours is byte {
+    if updateWindowInHours > 0 {
         time:Utc utcRequired = time:utcAddSeconds(time:utcNow(), <decimal>updateWindowInHours * 60 * 60 * -1);
         query += string ` WHERE LastModifiedDate > ${time:utcToString(utcRequired)}`;
     }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
@@ -106,9 +102,10 @@ function getQuery() returns string {
 
 function syncDataChunks(string id, FailureData failureData) returns error? {
     int pageNumber = 1;
+    int? effectiveMaxRecords = sfMaxRecords <= 0 ? () : sfMaxRecords;
     while true {
         // Retrieve data from Salesforce.
-        Contact[]? contacts = check retrieveChunk(id, failureData, pageNumber);
+        Contact[]? contacts = check retrieveChunk(id, failureData, pageNumber, effectiveMaxRecords);
         // Nil indicates that all data has been retrieved.
         if contacts is () {
             return;
@@ -132,11 +129,11 @@ function syncDataChunks(string id, FailureData failureData) returns error? {
 // Function to retrieve data from Salesforce in chunks.
 // Data retrieved in CSV format is then converted to an array of records, ensuring all
 // the expected fields are present.
-function retrieveChunk(string id, FailureData failureData, int pageNumber) returns Contact[]|error? {
+function retrieveChunk(string id, FailureData failureData, int pageNumber, int? effectiveMaxRecords) returns Contact[]|error? {
     log:printInfo("Retrieving Salesforce query results", pageNumber = pageNumber, jobId = id);
 
     // Retrieve the CSV data by specifying the job ID and max record size. 
-    string[][] csvData = check sfClient->getQueryResult(id, sfMaxRecords);
+    string[][] csvData = check sfClient->getQueryResult(id, effectiveMaxRecords);
     
     if csvData.length() < 2 {
         log:printInfo("No more data to retrieve", pageNumber = pageNumber, jobId = id);

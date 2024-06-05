@@ -3,10 +3,10 @@ import ballerina/time;
 
 import ballerinax/googleapis.gmail;
 
-configurable string[]? toEmailAddresses = ();
-configurable string? gmailRefreshToken = ();
-configurable string? gmailClientId = ();
-configurable string? gmailClientSecret = ();
+configurable string[] toEmailAddresses = [];
+configurable string gmailRefreshToken = "";
+configurable string gmailClientId = "";
+configurable string gmailClientSecret = "";
 
 function sendEmailForSyncFailure(string errMessage) {
     if isEmailConfigUnspecified() {
@@ -77,7 +77,7 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
         return;
     }
 
-    if toEmailAddresses is () {
+    if isEmailConfigUnspecified() {
         log:printDebug("Not sending notification email since email config is not specified.");
         return;
     }
@@ -102,15 +102,18 @@ function sendPartialFailureEmail(string emailBody, string subject) {
 }
 
 function isEmailConfigUnspecified() returns boolean {
-    return toEmailAddresses is () || gmailClientId is () || gmailClientSecret is () || gmailRefreshToken is ();
+    return toEmailAddresses.length() == 0 || 
+        gmailClientId.length() == 0 || 
+        gmailClientSecret.length() == 0 || 
+        gmailRefreshToken.length() == 0;
 }
 
 function initGmailClient() returns gmail:Client|error =>
     new gmail:Client({
         auth: <gmail:OAuth2RefreshTokenGrantConfig> {
-            clientId: check gmailClientId.ensureType(),
-            clientSecret: check gmailClientSecret.ensureType(),
-            refreshToken: check gmailRefreshToken.ensureType()
+            clientId: gmailClientId,
+            clientSecret: gmailClientSecret,
+            refreshToken: gmailRefreshToken
         }
     });
 
