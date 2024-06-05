@@ -6,22 +6,33 @@ import ballerinax/mssql;
 import ballerinax/mssql.driver as _;
 import ballerinax/salesforce as sf;
 
+// Specify values that can change by environment and/or run as `configurable`
+// variables. These can be overridden via configuration files, environment variables,
+// and CLI arguments - https://ballerina.io/learn/provide-values-to-configurable-variables/
+
+// Salesforce configuration.
 configurable string sfBaseUrl = ?;
 configurable string sfClientId = ?;
 configurable string sfClientSecret = ?;
 configurable string sfRefreshToken = ?;
 configurable string sfRefreshUrl = ?;
 
+// Database configuration.
 configurable int dbPort = ?;
 configurable string dbHost = ?;
 configurable string dbUser = ?;
 configurable string dbDatabase = ?;
 configurable string dbPassword = ?;
 configurable mssql:Options dbOptions = {};
+// Batch size for database operations, defaults to 1000, same as built-in Ballerina limit.
 configurable int dbBatchSize = 1000;
 
+// Update window configuration.
+// Allows retrieving only entries that were updated within the specified number of hours.
+// If unspecified, retrieves all data.
 configurable byte? updateWindowInHours = ();
 
+// The Salesforce connector instance that is used for Salesforce operations.
 final sf:Client sfClient = check initSalesforceClient();
 
 function initSalesforceClient() returns sf:Client|error => new ({
@@ -34,35 +45,50 @@ function initSalesforceClient() returns sf:Client|error => new ({
     }
 });
 
+// The SQL connector instance that is used for database operations.
 final sql:Client dbClient = check new mssql:Client(dbHost, dbUser, dbPassword, dbDatabase, dbPort, options = dbOptions);
 
+// The Salesforce query that is used to retireve data.
+// Can also be a variable instead.
 const string QUERY = "SELECT Id, FirstName, LastName, Phone, Fax, Email, Title, MailingStreet, MailingCity, MailingState, MailingCountry, IsDeleted, LastModifiedDate, OtherPostalCode FROM Contact";
 
 public function main() returns error? {
     do {
+        // Validate that the specified batch size is greater than zero.
         if dbBatchSize <= 0 {
             fail error(string `Invalid batch size ${dbBatchSize}, expected a value greater than zero.`);
         }
 
+        // `FailureData` is used to collect partial failure data (e.g., due to invalid values, 
+        // insufficient fields, etc.) to give detailed information on partial or full failure.
         FailureData failureData = {};
         
+        // Retrieve data from Salesforce.
         Contact[]? contactsRequiringUpdates = check queryBatch(getQuery(), failureData);
         if contactsRequiringUpdates is () {
             return;
         }
         
+        // Transform data from Salesforce to the format expected by the database.
+        // The actual transformation of individual entries is done via data mapper.
         DbContact[] dbContacts = check transformContacts(contactsRequiringUpdates, failureData);
         
+        // Update the database for successfully transformed values.
         check updateDatabase(dbContacts, failureData);
 
+        // Log partial failure data and send an email about failures if configured to do so.
         logPartialFailureDetailsAndSendEmail(failureData);
     } on fail error err {
+        // Control is transferred here if a failure occured for all data and/or a complete batch.
         log:printError("Failed to sync data", err);
+        // Send an email about the failure if configured to do so.
         sendEmailForSyncFailure(err.message());
         return err;
     }
 }
 
+// Build the final SOQL query for Salesforce. Incorporates a WHERE clause if `updateWindowInHours` 
+// was specified to retrieve only data that was updated within the specified number of hours.
 function getQuery() returns string {
     string query = QUERY;
 
@@ -74,6 +100,7 @@ function getQuery() returns string {
     return query;
 }
 
+// Transform a set of entries from the Salesforce representation to the format expected by the database.
 function transformContacts(Contact[] contacts, FailureData failureData) returns DbContact[]|error {
     DbContact[] dbContacts = [];
     Contact[] failedEntries = [];
@@ -98,6 +125,7 @@ function transformContacts(Contact[] contacts, FailureData failureData) returns 
     return dbContacts;
 }
 
+// Transform Contact data from the Salesforce representation to the format expected by the database.
 function transformContact(Contact contact) returns DbContact|error => 
     {
         id: check validateNonEmptyString(contact.Id),
@@ -113,6 +141,7 @@ function transformContact(Contact contact) returns DbContact|error =>
         lastModifiedDate: check time:civilFromString(contact.LastModifiedDate)
     };
 
+// Function to combine non-empty address components to an address string.
 function transformAddress(string mailingStreet, string mailingCity, string mailingState, string mailingCountry) returns string? => 
     let string address = string:'join(", ", ...from string component in [mailingStreet, mailingCity, mailingState, mailingCountry]
                             let string? nilableComponent = getNonEmptyStringValue(component)
@@ -120,13 +149,19 @@ function transformAddress(string mailingStreet, string mailingCity, string maili
                             select nilableComponent)
     in getNonEmptyStringValue(address);
 
+// Function to retrieve data from Salesforce.
+// Data retrieved in CSV format is then converted to an array of records, ensuring all
+// the expected fields are present.
 function queryBatch(string query, FailureData failureData) returns Contact[]|error? {
     log:printInfo("Querying Salesforce data", query = query);
 
+    // Create the query job and wait for its completion.
+    // The `id` of the bulk job is extracted to retrieve the results. 
     sf:BulkJobInfo {id} = check queryAndWait(query);
 
     log:printInfo("Retrieving Salesforce query results", jobId = id);
 
+    // Retrieve the CSV data by specifying the job ID. 
     string[][] csvData = check sfClient->getQueryResult(id);
     
     if csvData.length() < 2 {
@@ -136,14 +171,19 @@ function queryBatch(string query, FailureData failureData) returns Contact[]|err
 
     log:printInfo("Successfully retrieved data from Salesforce", count = csvData.length() - 1, jobId = id);
 
+    // Filter out up to date data to avoid transformation and updates of the database for already
+    // up to date data.
+    // The `LastModifiedDate` value is compared with that in the database to see if an update is required.
     string[][]? dataRequiringUpdates = check filterOutUpToDateData(csvData);
     if dataRequiringUpdates is () {
         return;
     }
 
+    // Transform the entries requiring updates to records.
     return transformCSVToRecords(dataRequiringUpdates, failureData);
 }
 
+// Create the query job and wait for its completion.
 function queryAndWait(string query) returns sf:BulkJobInfo|error {
     future<sf:BulkJobInfo|error> queryFuture = check sfClient->createQueryJobAndWait({
         operation: "query",
@@ -158,6 +198,7 @@ function queryAndWait(string query) returns sf:BulkJobInfo|error {
     return bulkJobInfo;
 }
 
+// Filter out up to date data and return only the data requiring database updates.
 function filterOutUpToDateData(string[][] csvData) returns string[][]|error? {
     string[] headers = csvData[0];
     string[][] dataRequiringUpdates = [headers];
@@ -220,6 +261,7 @@ function transformCSVToRecords(string[][] csvData, FailureData failureData) retu
     return mappings.cloneWithType();
 }
 
+// Check if two time values are the same.
 function isSameTime(time:Civil t1, time:Civil t2) returns boolean {
     time:Civil {timeAbbrev: _, dayOfWeek: _, ...dbT1} = t1;
     return dbT1 == t2;
