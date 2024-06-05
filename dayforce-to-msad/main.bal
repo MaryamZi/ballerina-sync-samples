@@ -81,7 +81,7 @@ public function main() returns error? {
         string jobId = check getJobId(jobStatus);
         jobIdOptional = jobId;
 
-        dayforce:Employee[]? data;
+        DayforceEmployee[]? data;
 
         // Retrieve paginated data until all the data is retrieved.
         dayforce:PaginatedPayload_IEnumerable_Employee? employeeDetails =
@@ -94,11 +94,11 @@ public function main() returns error? {
             }
             pageCount += 1;
             log:printInfo("Successfully retrieved entries from Dayforce", pageCount = pageCount, entryCount = data.length());
-            foreach dayforce:Employee employee in data {
+            foreach DayforceEmployee employee in data {
                 do {
                     // For each employee entry retrieved from Dayforce, transform the entry to the format
                     // expected by MS AD.
-                    ADEmployeeUpdate adUser = check transform(employee);
+                    ADEmployee adUser = check transform(employee);
                     // Update the details on MS AD.
                     ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
                     if resultStatus != ldap:SUCCESS {
@@ -144,32 +144,51 @@ function getJobId(dayforce:Payload_Object jobStatus) returns string|error {
     return split[split.length() - 1];
 }
 
-public type ADEmployeeUpdate record {
+type DayforceLocation record {
+    string ContactCellPhone?;
+    string BusinessPhone?;
+    string ContactEmail?;
+};
+
+// Alternatively, could directly use `dayforce:Employee`, but this would complicate
+// the data mapper view with a large number of unnecessary fields.
+type DayforceEmployee record {
+    string EmployeeNumber?;
+    dayforce:AppUserSSOCollection SSOAccounts?;
+    string FirstName?;
+    string MiddleName?;
+    string LastName?;
+    string DisplayName?;
+    DayforceLocation HomeOrganization?;
+    dayforce:EmployeeWorkAssignmentCollection WorkAssignments?;
+    dayforce:EmployeeManagerCollection EmployeeManagers?;
+    dayforce:PersonAddressCollection Addresses?;
+    dayforce:EmployeePropertyValueCollection EmployeeProperties?;
+};
+
+type ADEmployee record {|
     string employeeId;
     string userPrincipalName?;
     string givenName;
-    string? sn?;
-    string? company?;
-    string? co?;
-    string? streetAddress?;
-    string? mobile?;
-    string displayName?;
     string? middleName?;
-    string? extensionAttribute11?;
-    string? extensionAttribute10?;
-    string? postalCode?;
-    string? mail?;
-    string? l?;
+    string? sn?;
+    string displayName?;
+    string? mobile?;
     string? telephoneNumber?;
-    string? department?;
-    string? st?;
+    string? mail?;
     string title?;
     string manager?;
-};
+    string? department?;
+    string? company?;
+    string? streetAddress?;
+    string? co?;
+    string? st?;
+    string? l?;
+|};
 
-function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
+function transform(DayforceEmployee employee) returns ADEmployee|error =>
     let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
-        dayforce:Location? homeOrganization = employee?.HomeOrganization,
+        DayforceLocation? homeOrganization = employee?.HomeOrganization,
         dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
         dayforce:PersonAddress? address = getAddress(employee) in
     {
@@ -179,20 +198,20 @@ function transform(dayforce:Employee employee) returns ADEmployeeUpdate|error =>
         middleName: employee.MiddleName,
         sn: employee.LastName,
         displayName: employee.DisplayName,
-        mobile: homeOrganization?.ContactCellPhone,
-        telephoneNumber: homeOrganization?.BusinessPhone,
-        mail: homeOrganization?.ContactEmail,
-        title: getPositionField(employeeWorkAssignmentItems, TITLE),
+        mobile: homeOrganization is () ? "" : homeOrganization.ContactCellPhone,
+        telephoneNumber: homeOrganization is () ? "" : homeOrganization.BusinessPhone,
+        mail: homeOrganization is () ? "" : homeOrganization.ContactEmail,
         manager: getManager(employee?.EmployeeManagers?.Items),
+        title: getPositionField(employeeWorkAssignmentItems, TITLE),
         department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
         company: getPositionField(employeeWorkAssignmentItems, COMPANY),
-        streetAddress: address?.Address1,
-        co: address?.Country?.Name,
-        st: address?.State?.Name,
+        streetAddress: address is () ? () : address.Address1,
+        co: address is () ? () : address.Country?.Name,
+        st: address is () ? () : address.State?.Name,
         l: getLocality(employee?.EmployeeProperties?.Items)
     };
 
-function getEmployeeSSOAccountItem(dayforce:Employee employee) returns dayforce:EmployeeSSOAccount? {
+function getEmployeeSSOAccountItem(DayforceEmployee employee) returns dayforce:EmployeeSSOAccount? {
     dayforce:EmployeeSSOAccount[]? employeeSSOAccountItems = employee?.SSOAccounts?.Items;
     if employeeSSOAccountItems is () || employeeSSOAccountItems.length() == 0 {
         return ();
@@ -200,7 +219,7 @@ function getEmployeeSSOAccountItem(dayforce:Employee employee) returns dayforce:
     return employeeSSOAccountItems[0];
 }
 
-function getDistinguishedName(ADEmployeeUpdate user) returns string =>
+function getDistinguishedName(ADEmployee user) returns string =>
     let string firstName = user.givenName, 
         string? lastName = user?.sn,
         string name = lastName is () ? firstName : string `${firstName} ${lastName}` in
@@ -267,7 +286,7 @@ function getLocality(dayforce:EmployeePropertyValue[]? employeePropertyValueItem
     return ();
 }
 
-function getAddress(dayforce:Employee employee) returns dayforce:PersonAddress? {
+function getAddress(DayforceEmployee employee) returns dayforce:PersonAddress? {
     dayforce:PersonAddress[]? personAddressItems = employee?.Addresses?.Items;
     if personAddressItems is () || personAddressItems.length() == 0 {
         return ();
