@@ -124,7 +124,8 @@ function syncPage(DayforceEmployee[] data, string[] syncFailedEmployees) {
             // expected by MS AD.
             ADEmployee adUser = check transform(employee);
             // Update the details on MS AD.
-            ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
+            ldap:LDAPResponse {resultStatus} = 
+                check adClient->modify(getDistinguishedName(adUser.givenName, adUser?.sn), adUser);
             if resultStatus != ldap:SUCCESS {
                 fail error("Received non-success status on MS AD update attempt", status = resultStatus);
             }
@@ -158,7 +159,7 @@ function transform(DayforceEmployee employee) returns ADEmployee|error =>
         dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
         dayforce:PersonAddress? address = getAddress(employee) in
     {
-        employeeId: check employee.EmployeeNumber.ensureType(),
+        employeeID: check employee.EmployeeNumber.ensureType(),
         userPrincipalName: employeeSSOAccountItem is () ? () : employeeSSOAccountItem.LoginName,
         givenName: check employee.FirstName.ensureType(),
         middleName: employee.MiddleName,
@@ -167,7 +168,7 @@ function transform(DayforceEmployee employee) returns ADEmployee|error =>
         mobile: homeOrganization is () ? "" : homeOrganization.ContactCellPhone,
         telephoneNumber: homeOrganization is () ? "" : homeOrganization.BusinessPhone,
         mail: homeOrganization is () ? "" : homeOrganization.ContactEmail,
-        manager: getManager(employee?.EmployeeManagers?.Items),
+        manager: getManagerDistinguishedName(employee?.EmployeeManagers?.Items),
         title: getPositionField(employeeWorkAssignmentItems, TITLE),
         department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
         company: getPositionField(employeeWorkAssignmentItems, COMPANY),
@@ -185,10 +186,8 @@ function getEmployeeSSOAccountItem(DayforceEmployee employee) returns dayforce:E
     return employeeSSOAccountItems[0];
 }
 
-function getDistinguishedName(ADEmployee user) returns string =>
-    let string firstName = user.givenName, 
-        string? lastName = user?.sn,
-        string name = lastName is () ? firstName : string `${firstName} ${lastName}` in
+function getDistinguishedName(string firstName, string? lastName) returns string =>
+    let string name = lastName is () ? firstName : string `${firstName} ${lastName}` in
         string `CN=${name},OU=${adOU},DC=ad,DC=windows`;
 
 enum TitleField {
@@ -220,7 +219,7 @@ function getPositionField(dayforce:EmployeeWorkAssignment[]? employeeWorkAssignm
     return ();
 }
 
-function getManager(dayforce:EmployeeManager[]? employeeManagerItems) returns string? {
+function getManagerDistinguishedName(dayforce:EmployeeManager[]? employeeManagerItems) returns string? {
     if employeeManagerItems is () || employeeManagerItems.length() == 0 {
         return ();
     }
@@ -236,7 +235,7 @@ function getManager(dayforce:EmployeeManager[]? employeeManagerItems) returns st
         return firstName;
     }
 
-    return string `${firstName} ${lastName}`;
+    return getDistinguishedName(firstName, lastName);
 }
 
 function getLocality(dayforce:EmployeePropertyValue[]? employeePropertyValueItems) returns string? {

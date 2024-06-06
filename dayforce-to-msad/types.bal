@@ -25,7 +25,7 @@ type DayforceEmployee record {
 
 // Record representing data on MS AD.
 type ADEmployee record {|
-    string employeeId;
+    string employeeID;
     string userPrincipalName?;
     string givenName;
     string? middleName?;
