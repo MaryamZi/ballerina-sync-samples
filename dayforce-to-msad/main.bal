@@ -154,36 +154,32 @@ function waitForDayforceJobCompletion(int:Signed32 backgroundQueueItemId) return
 }
 
 function transform(DayforceEmployee employee) returns ADEmployee|error =>
-    let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
-        DayforceLocation? homeOrganization = employee?.HomeOrganization,
-        dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems = employee?.WorkAssignments?.Items,
-        dayforce:PersonAddress? address = getAddress(employee) in
+    let dayforce:PersonAddress? address = getAddress(employee.Addresses?.Items) in
     {
-        employeeID: check employee.EmployeeNumber.ensureType(),
-        userPrincipalName: employeeSSOAccountItem is () ? () : employeeSSOAccountItem.LoginName,
+        employeeID: employee.EmployeeNumber,
+        userPrincipalName: getUserPrincipalName(employee.SSOAccounts?.Items),
         givenName: check employee.FirstName.ensureType(),
         middleName: employee.MiddleName,
         sn: employee.LastName,
         displayName: employee.DisplayName,
-        mobile: homeOrganization is () ? "" : homeOrganization.ContactCellPhone,
-        telephoneNumber: homeOrganization is () ? "" : homeOrganization.BusinessPhone,
-        mail: homeOrganization is () ? "" : homeOrganization.ContactEmail,
-        manager: getManagerDistinguishedName(employee?.EmployeeManagers?.Items),
-        title: getPositionField(employeeWorkAssignmentItems, TITLE),
-        department: getPositionField(employeeWorkAssignmentItems, DEPARTMENT),
-        company: getPositionField(employeeWorkAssignmentItems, COMPANY),
+        mobile: employee.HomeOrganization?.ContactCellPhone,
+        telephoneNumber: employee.HomeOrganization?.BusinessPhone,
+        mail: employee.HomeOrganization?.ContactEmail,
+        manager: getManagerDistinguishedName(employee.EmployeeManagers?.Items),
+        title: getPositionField(employee.WorkAssignments?.Items, TITLE),
+        department: getPositionField(employee.WorkAssignments?.Items, DEPARTMENT),
+        company: getPositionField(employee.WorkAssignments?.Items, COMPANY),
         streetAddress: address is () ? () : address.Address1,
         co: address is () ? () : address.Country?.Name,
         st: address is () ? () : address.State?.Name,
-        l: getLocality(employee?.EmployeeProperties?.Items)
+        l: getLocality(employee.EmployeeProperties?.Items)
     };
 
-function getEmployeeSSOAccountItem(DayforceEmployee employee) returns dayforce:EmployeeSSOAccount? {
-    dayforce:EmployeeSSOAccount[]? employeeSSOAccountItems = employee?.SSOAccounts?.Items;
+function getUserPrincipalName(dayforce:EmployeeSSOAccount[]? employeeSSOAccountItems) returns string? {
     if employeeSSOAccountItems is () || employeeSSOAccountItems.length() == 0 {
         return ();
     }
-    return employeeSSOAccountItems[0];
+    return employeeSSOAccountItems[0].LoginName;
 }
 
 function getDistinguishedName(string firstName, string? lastName) returns string =>
@@ -197,23 +193,31 @@ enum TitleField {
 }
 
 function getPositionField(dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems, TitleField fieldName) returns string? {
-    if employeeWorkAssignmentItems is () {
+    dayforce:EmployeeWorkAssignment? item = getPrimaryWorkAssignment(employeeWorkAssignmentItems);
+    if item is () {
         return ();
     }
 
+    match fieldName {
+        TITLE => {
+            return item?.Position?.Job?.ShortName;
+        }
+        DEPARTMENT => {
+            return item?.Position?.Department?.ShortName;
+        }
+        _ => {
+            return item?.Location?.LegalEntity?.LongName;
+        }
+    }
+}
+
+function getPrimaryWorkAssignment(dayforce:EmployeeWorkAssignment[]? employeeWorkAssignmentItems) returns dayforce:EmployeeWorkAssignment? {
+    if employeeWorkAssignmentItems is () {
+        return ();
+    }
     foreach dayforce:EmployeeWorkAssignment item in employeeWorkAssignmentItems {
         if item.IsPrimary == true {
-            match fieldName {
-                TITLE => {
-                    return item?.Position?.Job?.ShortName;
-                }
-                DEPARTMENT => {
-                    return item?.Position?.Department?.ShortName;
-                }
-                COMPANY => {
-                    return item?.Location?.LegalEntity?.LongName;
-                }
-            }
+            return item;
         }
     }
     return ();
@@ -251,8 +255,7 @@ function getLocality(dayforce:EmployeePropertyValue[]? employeePropertyValueItem
     return ();
 }
 
-function getAddress(DayforceEmployee employee) returns dayforce:PersonAddress? {
-    dayforce:PersonAddress[]? personAddressItems = employee?.Addresses?.Items;
+function getAddress(dayforce:PersonAddress[]? personAddressItems) returns dayforce:PersonAddress? {
     if personAddressItems is () || personAddressItems.length() == 0 {
         return ();
     }
