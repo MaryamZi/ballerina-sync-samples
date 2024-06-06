@@ -83,20 +83,17 @@ CREATE TABLE [Contact] (
 The following configurable values are mandatory.
 
 ```toml
+sfBaseUrl = "<SF_BASE_URL>"
+sfClientId = "<SF_CLIENT_ID>"
+sfClientSecret = "<SF_CLIENT_SECRET>"
+sfRefreshToken = "<SF_REFRESH_TOKEN>"
+sfRefreshUrl = "<SF_REFRESH_URL>"
+
 dbHost = "<DB_HOST>"
 dbPort = DB_PORT
 dbUser = "<DB_USER>"
 dbPassword = "<DB_PASSWORD>"
 dbDatabase = "<DB_DATABASE>"
-
-[sfConnectionConfig]
-baseUrl = "<SF_BASE_URL>"
-
-[sfConnectionConfig.auth]
-clientId = "<SF_CLIENT_ID>"
-clientSecret = "<SF_CLIENT_SECRET>"
-refreshToken = "<SF_REFRESH_TOKEN>"
-refreshUrl = "<SF_REFRESH_URL>"
 ```
 
 #### Optional configurable values
@@ -124,13 +121,10 @@ refreshUrl = "<SF_REFRESH_URL>"
 - In order to send an email notification on failure, configure the following values for the GMail connector. If not specified, the sync will still happen, but emails will not be sent.
 
     ```toml
-    [emailConfig]
     toEmailAddresses = ["<EMAIL_ADDRESS_1>", "<EMAIL_ADDRESS_2>"]
-
-    [emailConfig.gmailAuthConfig]
-    refreshToken = "<GMAIL_REFRESH_TOKEN>"
-    clientId = "<GMAIL_CLIENT_ID>"
-    clientSecret = "<GMAIL_CLIENT_SECRET>"
+    gmailRefreshToken = "<GMAIL_REFRESH_TOKEN>"
+    gmailClientId = "<GMAIL_CLIENT_ID>"
+    gmailClientSecret = "<GMAIL_CLIENT_SECRET>"
     ```
 
 ### Running
@@ -138,7 +132,7 @@ refreshUrl = "<SF_REFRESH_URL>"
 Use the `bal run` command to run this program.
 
 ```cmd
-ballerina-sync-samples$ bal run
+salesforce-to-mssql$ bal run
 ```
 
 See [Develop a scheduled task](https://wso2.com/choreo/docs/develop-components/develop-integrations/develop-a-scheduled-task/) and [Develop a manual task](https://wso2.com/choreo/docs/develop-components/develop-integrations/develop-a-manual-task/) for deploying on Choreo.
@@ -150,32 +144,26 @@ See [Develop a scheduled task](https://wso2.com/choreo/docs/develop-components/d
 Since the Salesforce and GMail client calls are mocked, provide placeholder string values for the relevant configuration.
 
 ```toml
+sfBaseUrl = ""
+sfClientId = "placeholder"
+sfClientSecret = "placeholder"
+sfRefreshToken = "placeholder"
+sfRefreshUrl = "placeholder"
+
 dbHost = "<TEST_DB_HOST>"
 dbPort = TEST_DB_PORT
 dbUser = "<TEST_DB_USER>"
 dbPassword = "<TEST_DB_PASSWORD>"
 dbDatabase = "<TEST_DB_DATABASE>"
 
-[sfConnectionConfig]
-baseUrl = ""
-
-[sfConnectionConfig.auth]
-clientId = "placeholder"
-clientSecret = "placeholder"
-refreshToken = "placeholder"
-refreshUrl = "placeholder"
-
-[emailConfig]
 toEmailAddresses = ["placeholder"]
-
-[emailConfig.gmailAuthConfig]
-refreshToken = "placeholder"
-clientId = "placeholder"
-clientSecret = "placeholder"
+gmailRefreshToken = "placeholder"
+gmailClientId = "placeholder"
+gmailClientSecret = "placeholder"
 ```
 
 Use the `bal test` command to run the tests.
 
 ```cmd
-ballerina-sync-samples$ bal test
+salesforce-to-mssql$ bal test
 ```
