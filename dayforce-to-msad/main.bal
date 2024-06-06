@@ -12,6 +12,8 @@ import nuvindu/ldap;
 configurable string dayforceServiceUrl = ?;
 configurable string dayforceUsername = ?;
 configurable string dayforcePassword = ?;
+// Page size for Dayforce pagination.
+configurable int dayforcePageSize = 0;
 // Configuration for time to wait for Dayforce job to complete.
 configurable decimal dayforceJobCompletionWaitTime = 300;
 configurable decimal dayforceJobCompletionWaitInterval = 30;
@@ -53,7 +55,8 @@ public function main() returns error? {
     do {
         // Create the Employee export job and retrieve the queue ID.
         json job = check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/V1/EmployeeExportJobs.post(true, {
-            DeltaOption: MODIFIED_SINCE_DELTA_DATE
+            DeltaOption: MODIFIED_SINCE_DELTA_DATE,
+            PageSize: getEffectivePageSize(dayforcePageSize)
         });
         int:Signed32 backgroundQueueItemId = check getBackgroundQueueItemId(job);
 
@@ -130,6 +133,14 @@ public function main() returns error? {
 
     log:printError("Failed to sync some data from Dayforce to MS AD", syncedPageCount = pageCount, jobId = jobIdOptional, 
                     syncFailedEmployees = syncFailedEmployees);
+}
+
+function getEffectivePageSize(int pageSize) returns int:Signed32? {
+    if pageSize is int:Signed32 && pageSize > 0 {
+        return pageSize;
+    }
+    log:printWarn("Ignoring invalid page size", pageSize = pageSize);
+    return ();
 }
 
 function getBackgroundQueueItemId(json job) returns int:Signed32|error {
