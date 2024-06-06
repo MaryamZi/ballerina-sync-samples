@@ -16,7 +16,7 @@ configurable string dayforcePassword = ?;
 configurable int dayforcePageSize = 0;
 // Configuration for time to wait for Dayforce job to complete.
 configurable decimal dayforceJobCompletionWaitTime = 300;
-configurable decimal dayforceJobCompletionWaitInterval = 30;
+configurable decimal dayforceJobCompletionWaitInterval = 15;
 
 // MS AD configuration.
 configurable string adHostName = ?;
