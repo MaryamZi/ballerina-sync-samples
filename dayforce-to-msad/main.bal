@@ -62,16 +62,7 @@ public function main() returns error? {
 
         // Wait, a specific time period, for the job to complete, periodically checking if the job
         // is complete by retrieving the job status.
-        dayforce:Payload_Object jobStatus = 
-            check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
-        int tryCount = <int> (dayforceJobCompletionWaitTime / dayforceJobCompletionWaitInterval);
-        int currentTry = 0;
-        while jobStatus?.Data[STATUS] != SUCCEEDED && currentTry < tryCount {
-            runtime:sleep(dayforceJobCompletionWaitInterval);
-            jobStatus = 
-                check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
-            currentTry += 1;
-        }
+        dayforce:Payload_Object jobStatus = check waitForDayforceJobCompletion(backgroundQueueItemId);
 
         anydata status = jobStatus?.Data[STATUS];
         if status != SUCCEEDED {
@@ -84,41 +75,8 @@ public function main() returns error? {
         string jobId = check getJobId(jobStatus);
         jobIdOptional = jobId;
 
-        DayforceEmployee[]? data;
-
-        // Retrieve paginated data until all the data is retrieved.
-        dayforce:PaginatedPayload_IEnumerable_Employee? employeeDetails =
-            check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId];
-
-        while employeeDetails !is () {
-            data = employeeDetails?.Data;
-            if data is () {
-                break;
-            }
-            pageCount += 1;
-            log:printInfo("Successfully retrieved entries from Dayforce", pageCount = pageCount, entryCount = data.length());
-            foreach DayforceEmployee employee in data {
-                do {
-                    // For each employee entry retrieved from Dayforce, transform the entry to the format
-                    // expected by MS AD.
-                    ADEmployee adUser = check transform(employee);
-                    // Update the details on MS AD.
-                    ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
-                    if resultStatus != ldap:SUCCESS {
-                        fail error("Received non-success status on MS AD update attempt", status = resultStatus);
-                    }
-                } on fail error err {
-                    // For each individual failure, either due to transformation failure, update failure, or receiving a non-success
-                    // status, add the employee number to the list of failed IDs for detailed error reporting.
-                    string employeeNumber = employee.EmployeeNumber ?: "Unavailable";
-                    log:printError("Failed to sync data from Dayforce to MS AD for user", err, employeeNumber = employeeNumber);
-                    syncFailedEmployees.push(employeeNumber);
-                }
-            }
-            // Continue to retrieve pagignated data.
-            employeeDetails = 
-                check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId](employeeDetails.Paging);
-        }
+        // Retrieve paginated data and update the data on MS AD page by page.
+        pageCount = check syncData(jobId, syncFailedEmployees);
     } on fail error err {
         // Log and return an error if retrieving an entire chunk of data fails.
         log:printError("Failed to sync data from Dayforce to MS AD", err, syncedPageCount = pageCount, 
@@ -135,67 +93,64 @@ public function main() returns error? {
                     syncFailedEmployees = syncFailedEmployees);
 }
 
-function getEffectivePageSize(int pageSize) returns int:Signed32? {
-    if pageSize is int:Signed32 && pageSize > 0 {
-        return pageSize;
+// Handle pagination and sync all data.
+function syncData(string jobId, string[] syncFailedEmployees) returns int|error {
+    int pageCount = 0;
+    dayforce:PaginatedPayload_IEnumerable_Employee? employeeDetails =
+        check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId];
+    DayforceEmployee[]? data;
+    while employeeDetails !is () {
+        data = employeeDetails?.Data;
+        if data is () {
+            return pageCount;
+        }
+        pageCount += 1;
+
+        log:printInfo("Successfully retrieved entries from Dayforce", pageCount = pageCount, entryCount = data.length());
+        syncPage(data, syncFailedEmployees);
+        
+        // Continue to retrieve paginated data.
+        employeeDetails = 
+            check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/GetEmployeeBulkAPI/Data/[jobId](employeeDetails.Paging);
     }
-    log:printWarn("Ignoring invalid page size", pageSize = pageSize);
-    return ();
+    return pageCount;
 }
 
-function getBackgroundQueueItemId(json job) returns int:Signed32|error {
-    string jobStatus = check job.Data.JobStatus;
-    string[] split = re `Status/`.split(jobStatus);
-    return int:fromString(split[split.length() - 1]).ensureType();
+// Sync data on one page.
+function syncPage(DayforceEmployee[] data, string[] syncFailedEmployees) {
+    foreach DayforceEmployee employee in data {
+        do {
+            // For each employee entry retrieved from Dayforce, transform the entry to the format
+            // expected by MS AD.
+            ADEmployee adUser = check transform(employee);
+            // Update the details on MS AD.
+            ldap:LDAPResponse {resultStatus} = check adClient->modify(getDistinguishedName(adUser), adUser);
+            if resultStatus != ldap:SUCCESS {
+                fail error("Received non-success status on MS AD update attempt", status = resultStatus);
+            }
+        } on fail error err {
+            // For each individual failure, either due to transformation failure, update failure, or receiving a non-success
+            // status, add the employee number to the list of failed IDs for detailed error reporting.
+            string employeeNumber = employee.EmployeeNumber ?: "Unavailable";
+            log:printError("Failed to sync data from Dayforce to MS AD for user", err, employeeNumber = employeeNumber);
+            syncFailedEmployees.push(employeeNumber);
+        }
+    }
 }
 
-function getJobId(dayforce:Payload_Object jobStatus) returns string|error {
-    string results = check jobStatus.Data["Results"].ensureType();
-    string[] split = re `EmployeeExportJobs/Data/`.split(results);
-    return split[split.length() - 1];
+function waitForDayforceJobCompletion(int:Signed32 backgroundQueueItemId) returns dayforce:Payload_Object|error {
+    dayforce:Payload_Object jobStatus = 
+        check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
+    int tryCount = <int> (dayforceJobCompletionWaitTime / dayforceJobCompletionWaitInterval);
+    int currentTry = 0;
+    while jobStatus?.Data[STATUS] != SUCCEEDED && currentTry < tryCount {
+        runtime:sleep(dayforceJobCompletionWaitInterval);
+        jobStatus = 
+            check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
+        currentTry += 1;
+    }
+    return jobStatus;
 }
-
-type DayforceLocation record {
-    string ContactCellPhone?;
-    string BusinessPhone?;
-    string ContactEmail?;
-};
-
-// Alternatively, could directly use `dayforce:Employee`, but this would complicate
-// the data mapper view with a large number of unnecessary fields.
-type DayforceEmployee record {
-    string EmployeeNumber?;
-    dayforce:AppUserSSOCollection SSOAccounts?;
-    string FirstName?;
-    string MiddleName?;
-    string LastName?;
-    string DisplayName?;
-    DayforceLocation HomeOrganization?;
-    dayforce:EmployeeWorkAssignmentCollection WorkAssignments?;
-    dayforce:EmployeeManagerCollection EmployeeManagers?;
-    dayforce:PersonAddressCollection Addresses?;
-    dayforce:EmployeePropertyValueCollection EmployeeProperties?;
-};
-
-type ADEmployee record {|
-    string employeeId;
-    string userPrincipalName?;
-    string givenName;
-    string? middleName?;
-    string? sn?;
-    string displayName?;
-    string? mobile?;
-    string? telephoneNumber?;
-    string? mail?;
-    string title?;
-    string manager?;
-    string? department?;
-    string? company?;
-    string? streetAddress?;
-    string? co?;
-    string? st?;
-    string? l?;
-|};
 
 function transform(DayforceEmployee employee) returns ADEmployee|error =>
     let dayforce:EmployeeSSOAccount? employeeSSOAccountItem = getEmployeeSSOAccountItem(employee),
