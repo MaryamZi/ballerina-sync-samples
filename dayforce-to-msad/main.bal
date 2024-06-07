@@ -1,7 +1,7 @@
 import ballerina/lang.runtime;
 import ballerina/log;
+import ballerinax/dayforce;
 
-import bhashinee/dayforce;
 import nuvindu/ldap;
 
 // Specify values that can change by environment and/or run as `configurable`
@@ -124,10 +124,17 @@ function syncPage(DayforceEmployee[] data, string[] syncFailedEmployees) {
             // expected by MS AD.
             ADEmployee adUser = check transform(employee);
             // Update the details on MS AD.
-            ldap:LDAPResponse {resultStatus} = 
-                check adClient->modify(getDistinguishedName(adUser.givenName, adUser?.sn), adUser);
+            string distinguishedName = getDistinguishedName(adUser.givenName, adUser?.sn);
+            ldap:LDAPResponse|ldap:Error modifyRes = adClient->modify(distinguishedName, adUser);
+            
+            if modifyRes is error {
+                fail error("Failed to update user on MS AD", distinguishedName = distinguishedName);
+            }
+            
+            ldap:Status resultStatus = modifyRes.resultStatus;
             if resultStatus != ldap:SUCCESS {
-                fail error("Received non-success status on MS AD update attempt", status = resultStatus);
+                fail error("Received non-success status on MS AD update attempt", 
+                           distinguishedName = distinguishedName, status = resultStatus);
             }
         } on fail error err {
             // For each individual failure, either due to transformation failure, update failure, or receiving a non-success

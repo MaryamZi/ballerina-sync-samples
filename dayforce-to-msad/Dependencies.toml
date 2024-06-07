@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "cache"
-version = "3.7.1"
+version = "3.8.0"
 dependencies = [
 	{org = "ballerina", name = "constraint"},
 	{org = "ballerina", name = "jballerina.java"},
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "constraint"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
 ]
@@ -41,7 +41,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "crypto"
-version = "2.5.0"
+version = "2.6.2"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "time"}
@@ -283,7 +283,7 @@ modules = [
 ]
 
 [[package]]
-org = "bhashinee"
+org = "ballerinax"
 name = "dayforce"
 version = "0.1.0"
 dependencies = [
@@ -291,8 +291,8 @@ dependencies = [
 	{org = "ballerina", name = "url"}
 ]
 modules = [
-	{org = "bhashinee", packageName = "dayforce", moduleName = "dayforce"},
-	{org = "bhashinee", packageName = "dayforce", moduleName = "dayforce.oas"}
+	{org = "ballerinax", packageName = "dayforce", moduleName = "dayforce"},
+	{org = "ballerinax", packageName = "dayforce", moduleName = "dayforce.oas"}
 ]
 
 [[package]]
@@ -303,7 +303,7 @@ dependencies = [
 	{org = "ballerina", name = "lang.runtime"},
 	{org = "ballerina", name = "log"},
 	{org = "ballerinai", name = "observe"},
-	{org = "bhashinee", name = "dayforce"},
+	{org = "ballerinax", name = "dayforce"},
 	{org = "nuvindu", name = "ldap"}
 ]
 modules = [

@@ -1,4 +1,4 @@
-import bhashinee/dayforce;
+import ballerinax/dayforce;
 
 type DayforceLocation record {
     string ContactCellPhone?;

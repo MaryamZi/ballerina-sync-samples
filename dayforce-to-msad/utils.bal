@@ -1,6 +1,5 @@
 import ballerina/log;
-
-import bhashinee/dayforce;
+import ballerinax/dayforce;
 
 function getEffectivePageSize(int pageSize) returns int:Signed32? {
     if pageSize is int:Signed32 && pageSize > 0 {
