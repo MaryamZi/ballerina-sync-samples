@@ -1,6 +1,6 @@
 import ballerina/log;
+import ballerinax/dayforce;
 
-import bhashinee/dayforce;
 import nuvindu/ldap;
 
 configurable string adHostName = ?;

@@ -1,6 +1,6 @@
-import bhashinee/dayforce;
+import ballerinax/dayforce;
 
-dayforce:Employee[] employees = [
+final dayforce:Employee[] & readonly employees = [
    {
       "EmployeeNumber":"67890",
       "FirstName":"Laura",
