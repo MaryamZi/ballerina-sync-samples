@@ -37,8 +37,8 @@ final dayforce:Employee[] & readonly employees = [
                     "EffectiveStart": "2014-01-05T00:00:00",
                     "EffectiveEnd": "2020-01-05T00:00:00",
                     "ManagerXRefCode": "56745",
-                    "ManagerFirstName": "Musa",
-                    "ManagerLastName": "Fry",
+                    "ManagerFirstName": "Tanya",
+                    "ManagerLastName": "Granger",
                     "ManagerBadgeNumber": "234321"
                 }
             ]
