@@ -125,13 +125,13 @@ function syncPage(DayforceEmployee[] data, string[] syncFailedEmployees) {
             ADEmployee adUser = check transform(employee);
             // Update the details on MS AD.
             string distinguishedName = getDistinguishedName(adUser.givenName, adUser?.sn);
-            ldap:LDAPResponse|ldap:Error modifyRes = adClient->modify(distinguishedName, adUser);
+            ldap:LdapResponse|ldap:Error modifyRes = adClient->modify(distinguishedName, adUser);
             
             if modifyRes is error {
                 fail error("Failed to update user on MS AD", distinguishedName = distinguishedName);
             }
             
-            ldap:Status resultStatus = modifyRes.resultStatus;
+            ldap:Status resultStatus = modifyRes.resultCode;
             if resultStatus != ldap:SUCCESS {
                 fail error("Received non-success status on MS AD update attempt", 
                            distinguishedName = distinguishedName, status = resultStatus);
@@ -241,12 +241,7 @@ function getManagerDistinguishedName(dayforce:EmployeeManager[]? employeeManager
         return ();
     }
 
-    string? lastName = manager.ManagerLastName;
-    if lastName is () {
-        return firstName;
-    }
-
-    return getDistinguishedName(firstName, lastName);
+    return getDistinguishedName(firstName, manager.ManagerLastName);
 }
 
 function getLocality(dayforce:EmployeePropertyValue[]? employeePropertyValueItems) returns string? {
