@@ -1,6 +1,6 @@
-import bhashinee/dayforce;
+import ballerinax/dayforce;
 
-dayforce:Employee[] employees = [
+final dayforce:Employee[] & readonly employees = [
     {
         "EmployeeNumber": "67890",
         "FirstName": "Laura",
@@ -150,9 +150,9 @@ dayforce:Employee[] employees = [
                             "EffectiveStart": "2002-01-02T00:00:00",
                             "IsPAPrimaryWorkSite": false,
                             "IsPrimary": true,
-                            "XRefCode":"31",
-                            "ShortName":"Assistant Clerk",
-                            "LongName":"Assistant Clerk"
+                            "XRefCode": "31",
+                            "ShortName": "Assistant Clerk",
+                            "LongName": "Assistant Clerk"
                         }
                     }
                 }
