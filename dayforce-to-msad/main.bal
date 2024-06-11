@@ -1,4 +1,5 @@
 import ballerina/log;
+import ballerina/time;
 import ballerinax/dayforce;
 
 import nuvindu/ldap;
@@ -11,8 +12,13 @@ import nuvindu/ldap;
 configurable string dayforceServiceUrl = ?;
 configurable string dayforceUsername = ?;
 configurable string dayforcePassword = ?;
+
 // Page size for Dayforce pagination.
 configurable int dayforcePageSize = 0;
+
+// Update window in hours, used to compute date since which updates have to be retrieved.
+configurable int updateWindowInHours = 24;
+
 // Configuration for time to wait for Dayforce job to complete.
 configurable decimal dayforceJobCompletionWaitTime = 300;
 configurable decimal dayforceJobCompletionWaitInterval = 15;
@@ -55,6 +61,7 @@ public function main() returns error? {
         // Create the Employee export job and retrieve the queue ID.
         json job = check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/V1/EmployeeExportJobs.post(true, {
             DeltaOption: MODIFIED_SINCE_DELTA_DATE,
+            DeltaDate: getLastUpdateDate(),
             PageSize: getEffectivePageSize(dayforcePageSize)
         });
         int:Signed32 backgroundQueueItemId = check getBackgroundQueueItemId(job);
@@ -90,6 +97,11 @@ public function main() returns error? {
 
     log:printError("Failed to sync some data from Dayforce to MS AD", syncedPageCount = pageCount, jobId = jobIdOptional, 
                     syncFailedEmployees = syncFailedEmployees);
+}
+
+function getLastUpdateDate() returns string {
+    time:Utc utc = time:utcAddSeconds(time:utcNow(), <decimal>updateWindowInHours * 60 * 60 * -1);
+    return time:utcToString(utc);
 }
 
 // Handle pagination and sync all data.
