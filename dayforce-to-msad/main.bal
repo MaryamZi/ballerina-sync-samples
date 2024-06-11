@@ -1,4 +1,3 @@
-import ballerina/lang.runtime;
 import ballerina/log;
 import ballerinax/dayforce;
 
@@ -144,20 +143,6 @@ function syncPage(DayforceEmployee[] data, string[] syncFailedEmployees) {
             syncFailedEmployees.push(employeeNumber);
         }
     }
-}
-
-function waitForDayforceJobCompletion(int:Signed32 backgroundQueueItemId) returns dayforce:Payload_Object|error {
-    dayforce:Payload_Object jobStatus = 
-        check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
-    int tryCount = <int> (dayforceJobCompletionWaitTime / dayforceJobCompletionWaitInterval);
-    int currentTry = 0;
-    while jobStatus?.Data[STATUS] != SUCCEEDED && currentTry < tryCount {
-        runtime:sleep(dayforceJobCompletionWaitInterval);
-        jobStatus = 
-            check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/v1/EmployeeExportJobs/Status/[backgroundQueueItemId];
-        currentTry += 1;
-    }
-    return jobStatus;
 }
 
 function transform(DayforceEmployee employee) returns ADEmployee|error =>
