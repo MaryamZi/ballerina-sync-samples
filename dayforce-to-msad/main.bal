@@ -31,7 +31,7 @@ configurable string adPassword = ?;
 configurable string adOU = "People";
 
 const DAYFORCE_CLIENT_NAMESPACE = "demo.namespace";
-const MODIFIED_SINCE_DELTA_DATE = "MODIFIED_SINCE_DELTA_DATE";
+const MODIFIED_OR_EFFECTIVE_SINCE_DELTA_DATE = "MODIFIED_OR_EFFECTIVE_SINCE_DELTA_DATE";
 const SUCCEEDED = "Succeeded";
 const STATUS = "Status";
 
@@ -60,7 +60,7 @@ public function main() returns error? {
     do {
         // Create the Employee export job and retrieve the queue ID.
         json job = check dayforceClient->/[DAYFORCE_CLIENT_NAMESPACE]/V1/EmployeeExportJobs.post(true, {
-            DeltaOption: MODIFIED_SINCE_DELTA_DATE,
+            DeltaOption: MODIFIED_OR_EFFECTIVE_SINCE_DELTA_DATE,
             DeltaDate: getLastUpdateDate(),
             PageSize: getEffectivePageSize(dayforcePageSize)
         });
