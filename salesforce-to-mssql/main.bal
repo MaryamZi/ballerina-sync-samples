@@ -81,7 +81,7 @@ function syncData() returns error? {
 
     // `FailureData` is used to collect partial failure data (e.g., due to invalid values, 
     // insufficient fields, etc.) to give detailed information on partial or full failure.
-    FailureData failureData = {};
+    FailureData failureData = {jobId: id};
     check syncDataChunks(id, failureData);
     // Log partial failure data and send an email about failures if configured to do so.
     logPartialFailureDetailsAndSendEmail(failureData);    

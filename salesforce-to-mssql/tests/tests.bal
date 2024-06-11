@@ -208,7 +208,7 @@ function testAdditionalFieldsFromSF() returns error? {
 
     check main();
 
-    assertEmailSubject("Salesforce to MS SQL Sync - Ignored Fields");
+    assertEmailSubject("Salesforce to MS SQL Sync - Ignored Fields [Job ID: test-id]");
     assertEmailBody("Ignored extra Salesforce field(s): Name");
 }
 
@@ -235,7 +235,7 @@ function testFieldsOfInvalidTypesFromSF() returns error? {
 
     check main();
 
-    assertEmailSubject("Salesforce to MS SQL Sync Failed for Some Records");
+    assertEmailSubject("Salesforce to MS SQL Sync Failed for Some Records [Job ID: test-id]");
     string emailBodyString;
     lock {
         if emailBody is () {

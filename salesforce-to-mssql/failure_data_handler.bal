@@ -31,6 +31,7 @@ function sendEmailForSyncFailure(string errMessage) {
 }
 
 type FailureData record {|
+    string jobId;
     Contact[] transformationFailedEntries = [];
     string[] databaseSyncFailedEntriesIds = [];
     string[] ignoredFields = [];
@@ -54,19 +55,20 @@ function logPartialFailureDetailsAndSendEmail(FailureData failureData) {
     string emailBody = "";
 
     string? failureString = constructFailureString(failureData);
+    string jobId = failureData.jobId;
     if failureString is string {
-        emailSubject = "Salesforce to MS SQL Sync Failed for Some Records";
+        emailSubject = string `Salesforce to MS SQL Sync Failed for Some Records [Job ID: ${jobId}]`;
         emailBody = failureString;
-        log:printError("Failed to process some records", failures = failureString);
+        log:printError("Failed to process some records", jobId = jobId, failures = failureString);
     }
 
     string[] ignoredFields = failureData.ignoredFields;
     if ignoredFields.length() != 0 {
         string ignoredFieldsStr = string:'join(", ", ...ignoredFields);
-        log:printWarn("Ignored extra Salesforce field(s)", fields = ignoredFieldsStr);
+        log:printWarn("Ignored extra Salesforce field(s)", jobId = jobId, fields = ignoredFieldsStr);
         
         if emailBody.length() == 0 {
-            emailSubject = "Salesforce to MS SQL Sync - Ignored Fields";
+            emailSubject = string `Salesforce to MS SQL Sync - Ignored Fields [Job ID: ${jobId}]`;
         } else {
             emailBody += "\n\n";
         }
