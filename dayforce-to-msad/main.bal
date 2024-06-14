@@ -36,8 +36,9 @@ const SUCCEEDED = "Succeeded";
 const STATUS = "Status";
 
 // The Dayforce connector instance that is used for Dayforce operations.
-final dayforce:Client dayforceClient = check new ({
-    timeout: 120,
+final dayforce:Client dayforceClient = check initDayforceClient();
+
+function initDayforceClient() returns dayforce:Client|error => new ({
     auth: {
         username: dayforceUsername,
         password: dayforcePassword
@@ -45,7 +46,9 @@ final dayforce:Client dayforceClient = check new ({
 }, dayforceServiceUrl);
 
 // The LDAP connector instance that is used for MS AD operations.
-final ldap:Client adClient = check new ({
+final ldap:Client adClient = check initLdapClient();
+
+function initLdapClient() returns ldap:Client|error => new ({
     hostName: adHostName,
     port: adPort,
     domainName: adDomainName,
