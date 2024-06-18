@@ -1,13 +1,7 @@
-import ballerina/log;
 import ballerinax/dayforce;
 
-function getEffectivePageSize(int pageSize) returns int:Signed32? {
-    if pageSize is int:Signed32 && pageSize > 0 {
-        return pageSize;
-    }
-    log:printWarn("Ignoring invalid page size", pageSize = pageSize);
-    return ();
-}
+function getEffectivePageSize(int pageSize) returns int:Signed32? =>
+    pageSize is int:Signed32 && pageSize > 0 ? pageSize : ();
 
 function getBackgroundQueueItemId(json job) returns int:Signed32|error {
     string jobStatus = check job.Data.JobStatus;
