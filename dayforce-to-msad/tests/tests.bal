@@ -1,7 +1,7 @@
+import ballerina/ldap;
 import ballerina/test;
 import ballerinax/dayforce;
 
-import nuvindu/ldap;
 
 @test:Config
 function testDayforceToMSADTransformation() returns error? {
