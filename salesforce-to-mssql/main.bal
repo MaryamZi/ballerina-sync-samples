@@ -31,7 +31,7 @@ configurable int dbBatchSize = 1000;
 
 // Update window configuration.
 // Allows retrieving only entries that were updated within the specified number of hours.
-// If unspecified, retrieves all data.
+// If unspecified or less than zero, retrieves all data.
 configurable int updateWindowInHours = -1;
 
 // The Salesforce connector instance that is used for Salesforce operations.
