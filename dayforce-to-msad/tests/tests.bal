@@ -108,13 +108,13 @@ function getMockLdapClient() returns ldap:Client|error =>
     test:mock(ldap:Client, new MockLdapClient());
 
 isolated client class MockLdapClient {
-    remote isolated function modify(string distinguishedName, record {|anydata...;|} entry) 
+    remote isolated function modify(string distinguishedName, ldap:Entry entry) 
             returns ldap:LdapResponse|ldap:Error {
         lock {
             ADEmployee adEmployee = <ADEmployee> entry.clone();
             modifiedEmployees.push(adEmployee);
         }
-        return {resultCode: ldap:SUCCESS, operationType: "", matchedDN: ""};
+        return {resultCode: ldap:SUCCESS, matchedDN: "", diagnosticMessage: "", operationType: "", refferal: []};
     }
 }
 
